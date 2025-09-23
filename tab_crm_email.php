@@ -141,9 +141,57 @@ declare(strict_types=1);
   <?php } else if ($sub === 'people') { ?>
     <h3>People</h3>
     <p style="color:#666">People management coming soon.</p>
-  <?php } else if ($sub === 'organisations') { ?>
+  <?php } else if ($sub === 'organisations') { 
+    // Fetch companies from database
+    $companies = [];
+    $companyDebugInfo = '';
+    try {
+      $compStmt = $db->query('SELECT id, domain, name, created_at FROM companies ORDER BY id DESC');
+      $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+      $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies.';
+    } catch (Throwable $e) {
+      $companyDebugInfo = 'Database error: ' . $e->getMessage();
+    }
+  ?>
     <h3>Organisations</h3>
-    <p style="color:#666">Organisation management coming soon.</p>
+    <div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">
+      Debug: <?php echo htmlspecialchars($companyDebugInfo, ENT_QUOTES, 'UTF-8'); ?>
+    </div>
+    
+    <?php if (empty($companies)) { ?>
+      <p style="color:#666">No organisations yet. Add some companies from the Email tab.</p>
+    <?php } else { ?>
+      <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Domain</th>
+              <th>Name</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($companies as $company) { ?>
+              <tr>
+                <td><?php echo (int)$company['id']; ?></td>
+                <td>
+                  <span style="background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">
+                    <?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>
+                  </span>
+                </td>
+                <td><?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars((string)($company['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td>
+                  <span style="color: #28a745; font-size: 12px;">✓ Active</span>
+                </td>
+              </tr>
+            <?php } ?>
+          </tbody>
+        </table>
+      </div>
+    <?php } ?>
   <?php } ?>
 </section>
 
