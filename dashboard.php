@@ -247,97 +247,132 @@ try {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
-  <style>
-    html, body { height: 100%; margin: 0; }
-    body { display: grid; place-items: center; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, Helvetica, "Apple Color Emoji", "Segoe UI Emoji"; }
-    .container { text-align: center; }
-    .nav { display:flex; gap:12px; justify-content:center; margin: 12px 0 20px }
-    .nav a { padding:6px 10px; border:1px solid #ddd; border-radius:6px; text-decoration:none; color:#333 }
-    .nav a.active { background:#f5f5f5 }
-    .form-row { margin-bottom:10px }
-    .label { display:block; font-size:14px; color:#444; margin-bottom:4px }
-    input[type=text], input[type=url], input[type=file] { width:100%; padding:8px; box-sizing:border-box }
-    button { padding:10px 12px; cursor:pointer }
-    table { border-collapse:collapse; width:100% }
-    th, td { padding:8px; border-bottom:1px solid #eee; text-align:left }
-  </style>
+  <!-- Bootstrap CSS -->
+  <link href="css/bootstrap.min.css" rel="stylesheet">
+  <!-- Custom CSS -->
+  <link href="css/custom.css" rel="stylesheet">
 </head>
 <body>
-  <main class="container">
-    <h1>Welcome, <?php echo $username; ?>!</h1>
-    <p>You are logged in.</p>
-    <p><a href="logout.php">Log out</a></p>
+  <div class="dashboard-container">
+    <!-- Header -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <h1 class="h3 mb-1">Welcome, <?php echo $username; ?>!</h1>
+            <p class="text-muted mb-0">You are logged in.</p>
+          </div>
+          <div>
+            <a href="logout.php" class="btn btn-outline-secondary">Log out</a>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    <nav class="nav">
-      <a href="dashboard.php?tab=inbox" class="<?php echo $activeTab==='inbox'?'active':''; ?>">INBOX</a>
-      <a href="dashboard.php?tab=crm" class="<?php echo $activeTab==='crm'?'active':''; ?>">CRM</a>
-      <a href="dashboard.php?tab=admin" class="<?php echo $activeTab==='admin'?'active':''; ?>">ADMIN</a>
-    </nav>
+    <!-- Navigation -->
+    <div class="row mb-4">
+      <div class="col-12">
+        <ul class="nav nav-pills justify-content-center">
+          <li class="nav-item">
+            <a class="nav-link <?php echo $activeTab==='inbox'?'active':''; ?>" href="dashboard.php?tab=inbox">INBOX</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link <?php echo $activeTab==='crm'?'active':''; ?>" href="dashboard.php?tab=crm">CRM</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link <?php echo $activeTab==='admin'?'active':''; ?>" href="dashboard.php?tab=admin">ADMIN</a>
+          </li>
+        </ul>
+      </div>
+    </div>
 
     <?php if ($activeTab === 'channels') { ?>
-      <section style="text-align:left; max-width:720px">
-        <h2>Add channel</h2>
-        <?php if ($flashMessage) { ?><div style="color:green; margin:8px 0"><?php echo htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-        <?php if ($flashError) { ?><div style="color:#c00; margin:8px 0"><?php echo htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-        <form action="dashboard.php?tab=channels" method="post" enctype="multipart/form-data">
-          <div class="form-row">
-            <label class="label" for="channel_name">Channel name</label>
-            <input id="channel_name" name="channel_name" type="text" required />
+      <div class="row">
+        <div class="col-lg-8 mx-auto">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="card-title mb-0">Add Channel</h5>
+            </div>
+            <div class="card-body">
+              <?php if ($flashMessage) { ?><div class="alert alert-success"><?php echo htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
+              <?php if ($flashError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
+              <form action="dashboard.php?tab=channels" method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                  <label for="channel_name" class="form-label">Channel name</label>
+                  <input id="channel_name" name="channel_name" type="text" class="form-control" required />
+                </div>
+                <div class="mb-3">
+                  <label for="channel_homepage" class="form-label">Channel homepage</label>
+                  <input id="channel_homepage" name="channel_homepage" type="url" class="form-control" placeholder="https://example.com" required />
+                </div>
+                <div class="mb-3">
+                  <label for="channel_logo" class="form-label">Upload logo (png/jpg/gif/webp)</label>
+                  <input id="channel_logo" name="channel_logo" type="file" class="form-control" accept=".png,.jpg,.jpeg,.gif,.webp" />
+                </div>
+                <button type="submit" class="btn btn-primary">Create channel</button>
+              </form>
+            </div>
           </div>
-          <div class="form-row">
-            <label class="label" for="channel_homepage">Channel homepage</label>
-            <input id="channel_homepage" name="channel_homepage" type="url" placeholder="https://example.com" required />
-          </div>
-          <div class="form-row">
-            <label class="label" for="channel_logo">Upload logo (png/jpg/gif/webp)</label>
-            <input id="channel_logo" name="channel_logo" type="file" accept=".png,.jpg,.jpeg,.gif,.webp" />
-          </div>
-          <button type="submit">Create channel</button>
-        </form>
+        </div>
+      </div>
 
-        <h2 style="margin-top:24px">Channels</h2>
-        <?php if (empty($channels)) { ?>
-          <p style="color:#666">No channels yet.</p>
-        <?php } else { ?>
-          <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Homepage</th>
-                  <th>Logo</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php foreach ($channels as $ch) { ?>
-                  <tr>
-                    <td><?php echo (int)$ch['id']; ?></td>
-                    <td><?php echo htmlspecialchars((string)$ch['name'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><a href="<?php echo htmlspecialchars((string)$ch['homepage_url'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener">link</a></td>
-                    <td>
-                      <?php if (!empty($ch['logo_path'])) { ?>
-                        <img src="<?php echo htmlspecialchars((string)$ch['logo_path'], ENT_QUOTES, 'UTF-8'); ?>" alt="logo" style="height:28px" />
-                      <?php } else { echo '-'; } ?>
-                    </td>
-                    <td><?php echo htmlspecialchars((string)$ch['created_at'], ENT_QUOTES, 'UTF-8'); ?></td>
-                  </tr>
-                <?php } ?>
-              </tbody>
-            </table>
+      <div class="row mt-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="card-title mb-0">Channels</h5>
+            </div>
+            <div class="card-body">
+              <?php if (empty($channels)) { ?>
+                <p class="text-muted">No channels yet.</p>
+              <?php } else { ?>
+                <div class="table-responsive">
+                  <table class="table table-striped">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Homepage</th>
+                        <th>Logo</th>
+                        <th>Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach ($channels as $ch) { ?>
+                        <tr>
+                          <td><?php echo (int)$ch['id']; ?></td>
+                          <td><?php echo htmlspecialchars((string)$ch['name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                          <td><a href="<?php echo htmlspecialchars((string)$ch['homepage_url'], ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Visit</a></td>
+                          <td>
+                            <?php if (!empty($ch['logo_path'])) { ?>
+                              <img src="<?php echo htmlspecialchars((string)$ch['logo_path'], ENT_QUOTES, 'UTF-8'); ?>" alt="logo" class="channel-logo" />
+                            <?php } else { echo '<span class="text-muted">-</span>'; } ?>
+                          </td>
+                          <td><?php echo htmlspecialchars((string)$ch['created_at'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        </tr>
+                      <?php } ?>
+                    </tbody>
+                  </table>
+                </div>
+              <?php } ?>
+            </div>
           </div>
-        <?php } ?>
-      </section>
+        </div>
+      </div>
     <?php } else if ($activeTab === 'inbox') { ?>
-      <section style="text-align:left; max-width:920px">
-        <h2>Inbox</h2>
+      <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="card-title mb-0">Inbox</h5>
+            </div>
+            <div class="card-body">
         <?php
         $imapSupported = function_exists('imap_open');
         $emails = [];
         $imapError = '';
         if (!$imapSupported) {
-            echo '<p style="color:#c00">PHP IMAP extension is not available on this server.</p>';
+            echo '<div class="alert alert-danger">PHP IMAP extension is not available on this server.</div>';
         } else {
             $cfg = [];
             $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
@@ -406,14 +441,14 @@ try {
                     imap_close($inbox);
                 }
             } else {
-                echo '<p style="color:#c00">Missing IMAP credentials. Copy config.example.php to config.local.php and fill in your details.</p>';
+                echo '<div class="alert alert-warning">Missing IMAP credentials. Copy config.example.php to config.local.php and fill in your details.</div>';
             }
         }
         ?>
-        <?php if ($imapError) { ?><div style="color:#c00; margin:8px 0"><?php echo htmlspecialchars($imapError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
+        <?php if ($imapError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($imapError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
         <?php if (!empty($emails)) { ?>
-          <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
-            <table>
+          <div class="table-responsive">
+            <table class="table table-hover email-table">
               <thead>
                 <tr>
                   <th>#</th>
@@ -427,11 +462,11 @@ try {
                       // use row index for view
                       $viewUrl = 'dashboard.php?tab=inbox&view_idx=' . urlencode((string)$em['index']);
                    ?>
-                  <tr>
-                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo (int)$em['index']; ?></a></td>
-                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></a></td>
-                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></a></td>
-                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></a></td>
+                  <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
+                    <td><?php echo (int)$em['index']; ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
                   </tr>
                 <?php } ?>
               </tbody>
@@ -505,14 +540,16 @@ try {
                 }
           ?>
           <?php if (!empty($detail)) { ?>
-            <div style="margin-top:16px; padding:12px; border:1px solid #ddd; border-radius:6px">
-              <h3 style="margin-top:0">Message</h3>
-              <div><strong>From:</strong> <?php echo htmlspecialchars($detail['from'], ENT_QUOTES, 'UTF-8'); ?></div>
-              <div><strong>Subject:</strong> <?php echo htmlspecialchars($detail['subject'], ENT_QUOTES, 'UTF-8'); ?></div>
-              <div><strong>Date:</strong> <?php echo htmlspecialchars($detail['date'], ENT_QUOTES, 'UTF-8'); ?></div>
-              <div style="margin-top:12px">
+            <div class="message-detail mt-4 p-3">
+              <h5 class="mb-3">Message Details</h5>
+              <div class="row mb-3">
+                <div class="col-md-4"><strong>From:</strong> <?php echo htmlspecialchars($detail['from'], ENT_QUOTES, 'UTF-8'); ?></div>
+                <div class="col-md-8"><strong>Subject:</strong> <?php echo htmlspecialchars($detail['subject'], ENT_QUOTES, 'UTF-8'); ?></div>
+              </div>
+              <div class="mb-3"><strong>Date:</strong> <?php echo htmlspecialchars($detail['date'], ENT_QUOTES, 'UTF-8'); ?></div>
+              <div class="mb-3">
                 <strong>Content:</strong>
-                <div style="border:1px solid #eee; border-radius:6px; padding:10px; background:#fafafa; max-height:420px; overflow:auto">
+                <div class="message-content p-3 mt-2">
                   <?php
                     if ($detail['html'] !== '') {
                         // show HTML as escaped preview
@@ -523,126 +560,162 @@ try {
                   ?>
                 </div>
               </div>
-              <div style="margin-top:12px">
+              <div class="mb-3">
                 <strong>Attachments:</strong>
-                <?php if (empty($detail['attachments'])) { echo '<span style="color:#666"> none</span>'; } else { ?>
-                  <ul>
+                <?php if (empty($detail['attachments'])) { echo '<span class="text-muted"> none</span>'; } else { ?>
+                  <ul class="list-unstyled">
                     <?php foreach ($detail['attachments'] as $att) { ?>
-                      <li><?php echo htmlspecialchars((string)$att['filename'], ENT_QUOTES, 'UTF-8'); ?></li>
+                      <li><span class="badge bg-secondary"><?php echo htmlspecialchars((string)$att['filename'], ENT_QUOTES, 'UTF-8'); ?></span></li>
                     <?php } ?>
                   </ul>
                 <?php } ?>
               </div>
-              <div style="margin-top:12px">
-                <details>
-                  <summary>Reply</summary>
-                  <?php
-                    // Find/create contact id by from email
-                    $fromAddr = (string)$detail['from'];
-                    $fromEmailOnly = $fromAddr;
-                    if (preg_match('/<([^>]+)>/', $fromAddr, $mfe)) { $fromEmailOnly = strtolower(trim($mfe[1])); }
-                    $contactId = null;
-                    if ($fromEmailOnly !== '') {
-                        try {
-                            $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
-                               ->execute([':e'=>$fromEmailOnly, ':n'=>null, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                            $stC = $db->prepare('SELECT id FROM emails WHERE email = :e');
-                            $stC->execute([':e'=>$fromEmailOnly]);
-                            $rC = $stC->fetch();
-                            if ($rC) { $contactId = (int)$rC['id']; }
-                        } catch (Throwable $ign) {}
-                    }
-                  ?>
-                  <?php if ($contactId) { ?>
-                    <form action="dashboard.php?tab=inbox&view_idx=<?php echo urlencode((string)$viewIdx); ?>" method="post" style="margin-top:8px">
-                      <input type="hidden" name="action" value="reply" />
-                      <input type="hidden" name="email_id" value="<?php echo (int)$contactId; ?>" />
-                      <input type="text" name="subject" placeholder="Subject" style="width:100%; margin-bottom:6px" required />
-                      <textarea name="body" rows="6" style="width:100%" placeholder="Your reply..." required></textarea>
-                      <div style="margin-top:6px"><button type="submit">Send & Save</button></div>
-                    </form>
-                  <?php } else { echo '<p style="color:#666">No contact email found to reply.</p>'; } ?>
-                </details>
+              <div class="mt-3">
+                <div class="accordion" id="replyAccordion">
+                  <div class="accordion-item">
+                    <h2 class="accordion-header">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#replyCollapse" aria-expanded="false" aria-controls="replyCollapse">
+                        Reply
+                      </button>
+                    </h2>
+                    <div id="replyCollapse" class="accordion-collapse collapse" data-bs-parent="#replyAccordion">
+                      <div class="accordion-body">
+                        <?php
+                          // Find/create contact id by from email
+                          $fromAddr = (string)$detail['from'];
+                          $fromEmailOnly = $fromAddr;
+                          if (preg_match('/<([^>]+)>/', $fromAddr, $mfe)) { $fromEmailOnly = strtolower(trim($mfe[1])); }
+                          $contactId = null;
+                          if ($fromEmailOnly !== '') {
+                              try {
+                                  $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
+                                     ->execute([':e'=>$fromEmailOnly, ':n'=>null, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                                  $stC = $db->prepare('SELECT id FROM emails WHERE email = :e');
+                                  $stC->execute([':e'=>$fromEmailOnly]);
+                                  $rC = $stC->fetch();
+                                  if ($rC) { $contactId = (int)$rC['id']; }
+                              } catch (Throwable $ign) {}
+                          }
+                        ?>
+                        <?php if ($contactId) { ?>
+                          <form action="dashboard.php?tab=inbox&view_idx=<?php echo urlencode((string)$viewIdx); ?>" method="post">
+                            <input type="hidden" name="action" value="reply" />
+                            <input type="hidden" name="email_id" value="<?php echo (int)$contactId; ?>" />
+                            <div class="mb-3">
+                              <input type="text" name="subject" class="form-control" placeholder="Subject" required />
+                            </div>
+                            <div class="mb-3">
+                              <textarea name="body" rows="6" class="form-control" placeholder="Your reply..." required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Send & Save</button>
+                          </form>
+                        <?php } else { echo '<p class="text-muted">No contact email found to reply.</p>'; } ?>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           <?php } ?>
           <?php } // end detail panel ?>
         <?php } else if ($imapSupported && !$imapError) { ?>
-          <p style="color:#666">No emails found.</p>
+          <p class="text-muted">No emails found.</p>
         <?php } ?>
-      </section>
+            </div>
+          </div>
+        </div>
+      </div>
     <?php } else if ($activeTab === 'crm') { ?>
       <?php include __DIR__ . '/tab_crm_email.php'; ?>
     <?php } else if ($activeTab === 'admin') { ?>
       <?php include __DIR__ . '/tab_admin.php'; ?>
     <?php } else if ($activeTab === 'site') { ?>
-      <section style="text-align:left; max-width:980px">
-        <h2>Site specification</h2>
-        <?php
-          $dataModelPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'data-model.md';
-          $uiBehaviorPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'ui-behavior.md';
-          $renderMd = function(string $path): string {
-              if (!is_file($path)) { return '<p style="color:#666">Missing: ' . htmlspecialchars(basename($path), ENT_QUOTES, 'UTF-8') . '</p>'; }
-              $txt = (string)@file_get_contents($path);
-              // minimal Markdown-ish rendering: escape then convert basic headings and line breaks
-              $safe = htmlspecialchars($txt, ENT_QUOTES, 'UTF-8');
-              $safe = preg_replace('/^## (.*)$/m', '<h3>$1</h3>', $safe);
-              $safe = preg_replace('/^### (.*)$/m', '<h4>$1</h4>', $safe);
-              $safe = preg_replace('/^- (.*)$/m', '<li>$1</li>', $safe);
-              $safe = preg_replace('/\n{2,}/', "\n\n", $safe);
-              // wrap consecutive <li> into <ul>
-              $safe = preg_replace('/(?:<li>.*<\/li>\n?)+/s', '<ul>$0</ul>', (string)$safe);
-              return nl2br($safe);
-          };
-        ?>
-        <h3>Data model</h3>
-        <div style="padding:12px; border:1px solid #eee; border-radius:6px; background:#fafafa"><?php echo $renderMd($dataModelPath); ?></div>
-        <h3 style="margin-top:20px">UI behavior</h3>
-        <div style="padding:12px; border:1px solid #eee; border-radius:6px; background:#fafafa"><?php echo $renderMd($uiBehaviorPath); ?></div>
-      </section>
+      <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="card-title mb-0">Site Specification</h5>
+            </div>
+            <div class="card-body">
+              <?php
+                $dataModelPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'data-model.md';
+                $uiBehaviorPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'ui-behavior.md';
+                $renderMd = function(string $path): string {
+                    if (!is_file($path)) { return '<p class="text-muted">Missing: ' . htmlspecialchars(basename($path), ENT_QUOTES, 'UTF-8') . '</p>'; }
+                    $txt = (string)@file_get_contents($path);
+                    // minimal Markdown-ish rendering: escape then convert basic headings and line breaks
+                    $safe = htmlspecialchars($txt, ENT_QUOTES, 'UTF-8');
+                    $safe = preg_replace('/^## (.*)$/m', '<h3>$1</h3>', $safe);
+                    $safe = preg_replace('/^### (.*)$/m', '<h4>$1</h4>', $safe);
+                    $safe = preg_replace('/^- (.*)$/m', '<li>$1</li>', $safe);
+                    $safe = preg_replace('/\n{2,}/', "\n\n", $safe);
+                    // wrap consecutive <li> into <ul>
+                    $safe = preg_replace('/(?:<li>.*<\/li>\n?)+/s', '<ul>$0</ul>', (string)$safe);
+                    return nl2br($safe);
+                };
+              ?>
+              <h5>Data model</h5>
+              <div class="p-3 border rounded bg-light"><?php echo $renderMd($dataModelPath); ?></div>
+              <h5 class="mt-4">UI behavior</h5>
+              <div class="p-3 border rounded bg-light"><?php echo $renderMd($uiBehaviorPath); ?></div>
+            </div>
+          </div>
+        </div>
+      </div>
     <?php } else { ?>
-      <section style="text-align:left; max-width:920px">
-        <h2 style="text-align:center">Database overview</h2>
-        <?php if (empty($tables)) { ?>
-          <p style="text-align:center; color:#666">No user tables found.</p>
-        <?php } else { ?>
-          <ul>
-            <?php foreach ($tables as $t) { ?>
-              <li><strong><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?></strong></li>
-            <?php } ?>
-          </ul>
+      <div class="row">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header">
+              <h5 class="card-title mb-0 text-center">Database Overview</h5>
+            </div>
+            <div class="card-body">
+              <?php if (empty($tables)) { ?>
+                <p class="text-center text-muted">No user tables found.</p>
+              <?php } else { ?>
+                <ul class="list-unstyled">
+                  <?php foreach ($tables as $t) { ?>
+                    <li><strong><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?></strong></li>
+                  <?php } ?>
+                </ul>
 
-          <?php foreach ($tables as $t) { $rows = $tableSamples[$t] ?? []; ?>
-            <h3><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?> (first 10 rows)</h3>
-            <?php if (empty($rows)) { ?>
-              <p style="color:#666">No rows.</p>
-            <?php } else { $cols = array_keys($rows[0]); ?>
-              <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
-                <table style="border-collapse:collapse; min-width:600px; width:100%">
-                  <thead>
-                    <tr>
-                      <?php foreach ($cols as $c) { ?>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #eee; background:#fafafa"><?php echo htmlspecialchars((string)$c, ENT_QUOTES, 'UTF-8'); ?></th>
-                      <?php } ?>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($rows as $r) { ?>
-                      <tr>
-                        <?php foreach ($cols as $c) { $val = (string)($r[$c] ?? ''); ?>
-                          <td style="padding:8px; border-bottom:1px solid #f3f3f3; vertical-align:top; white-space:pre-wrap; word-break:break-word"><?php echo htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); ?></td>
-                        <?php } ?>
-                      </tr>
-                    <?php } ?>
-                  </tbody>
-                </table>
-              </div>
-            <?php } ?>
-          <?php } ?>
-        <?php } ?>
-      </section>
+                <?php foreach ($tables as $t) { $rows = $tableSamples[$t] ?? []; ?>
+                  <h6 class="mt-4"><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?> (first 10 rows)</h6>
+                  <?php if (empty($rows)) { ?>
+                    <p class="text-muted">No rows.</p>
+                  <?php } else { $cols = array_keys($rows[0]); ?>
+                    <div class="table-responsive">
+                      <table class="table table-striped table-sm">
+                        <thead>
+                          <tr>
+                            <?php foreach ($cols as $c) { ?>
+                              <th><?php echo htmlspecialchars((string)$c, ENT_QUOTES, 'UTF-8'); ?></th>
+                            <?php } ?>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <?php foreach ($rows as $r) { ?>
+                            <tr>
+                              <?php foreach ($cols as $c) { $val = (string)($r[$c] ?? ''); ?>
+                                <td style="white-space:pre-wrap; word-break:break-word"><?php echo htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); ?></td>
+                              <?php } ?>
+                            </tr>
+                          <?php } ?>
+                        </tbody>
+                      </table>
+                    </div>
+                  <?php } ?>
+                <?php } ?>
+              <?php } ?>
+            </div>
+          </div>
+        </div>
+      </div>
     <?php } ?>
-  </main>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 

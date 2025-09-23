@@ -1,0 +1,79 @@
+/* Custom styles for mobilo project */
+
+/* Dashboard specific styles */
+.dashboard-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.nav-pills .nav-link {
+    border-radius: 6px;
+    margin-right: 8px;
+}
+
+.nav-pills .nav-link.active {
+    background-color: #0d6efd;
+}
+
+/* Email table responsive */
+.email-table {
+    font-size: 0.9rem;
+}
+
+.email-table th {
+    white-space: nowrap;
+    background-color: #f8f9fa;
+}
+
+/* Inbox message detail */
+.message-detail {
+    background-color: #f8f9fa;
+    border-left: 4px solid #0d6efd;
+}
+
+.message-content {
+    max-height: 400px;
+    overflow-y: auto;
+    background-color: white;
+    border: 1px solid #dee2e6;
+}
+
+/* Channel logos */
+.channel-logo {
+    max-height: 40px;
+    width: auto;
+}
+
+/* Status badges */
+.status-badge {
+    font-size: 0.75rem;
+}
+
+/* Custom button styles */
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Form improvements */
+.form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: 10px;
+    }
+    
+    .nav-pills {
+        flex-direction: column;
+    }
+    
+    .nav-pills .nav-link {
+        margin-bottom: 5px;
+        margin-right: 0;
+    }
+}
