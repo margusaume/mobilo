@@ -78,6 +78,13 @@ try {
         UNIQUE(email_id, company_id)
     )');
 
+    // Create people table
+    $db->exec('CREATE TABLE IF NOT EXISTS people (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL
+    )');
+
     echo "Adding missing columns...<br>";
     
     // Add company column to emails table if it doesn't exist
