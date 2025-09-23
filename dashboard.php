@@ -14,7 +14,7 @@ $username = htmlspecialchars((string)($_SESSION['username'] ?? 'user'), ENT_QUOT
 $activeTab = 'users';
 if (isset($_GET['tab'])) {
     $tab = $_GET['tab'];
-    if ($tab === 'channels' || $tab === 'inbox' || $tab === 'emails' || $tab === 'site' || $tab === 'users') {
+    if ($tab === 'channels' || $tab === 'inbox' || $tab === 'crm' || $tab === 'admin' || $tab === 'users') {
         $activeTab = $tab;
     }
 }
@@ -269,11 +269,10 @@ try {
     <p><a href="logout.php">Log out</a></p>
 
     <nav class="nav">
-      <a href="dashboard.php?tab=users" class="<?php echo $activeTab==='users'?'active':''; ?>">Users</a>
       <a href="dashboard.php?tab=channels" class="<?php echo $activeTab==='channels'?'active':''; ?>">Channels</a>
       <a href="dashboard.php?tab=inbox" class="<?php echo $activeTab==='inbox'?'active':''; ?>">INBOX</a>
-      <a href="dashboard.php?tab=emails" class="<?php echo $activeTab==='emails'?'active':''; ?>">Emails</a>
-      <a href="dashboard.php?tab=site" class="<?php echo $activeTab==='site'?'active':''; ?>">Site</a>
+      <a href="dashboard.php?tab=crm" class="<?php echo $activeTab==='crm'?'active':''; ?>">CRM:email</a>
+      <a href="dashboard.php?tab=admin" class="<?php echo $activeTab==='admin'?'active':''; ?>">ADMIN</a>
     </nav>
 
     <?php if ($activeTab === 'channels') { ?>
@@ -588,75 +587,10 @@ try {
           <p style="color:#666">No emails found.</p>
         <?php } ?>
       </section>
-    <?php } else if ($activeTab === 'emails') { ?>
-      <section style="text-align:left; max-width:1024px">
-        <h2>Emails</h2>
-        <?php
-          $rows = [];
-          try {
-            $emStmt = $db->query('SELECT e.id, e.email, e.name FROM emails e ORDER BY e.id DESC');
-            $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-          } catch (Throwable $ign) {}
-
-          // handle edits
-          if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($activeTab === 'emails')) {
-            $act = (string)($_POST['action'] ?? '');
-            if ($act === 'update_email') {
-              $id = (int)($_POST['id'] ?? 0);
-              $email = strtolower(trim((string)($_POST['email'] ?? '')));
-              $name = trim((string)($_POST['name'] ?? ''));
-              if ($id > 0 && $email !== '') {
-                try {
-                  $st = $db->prepare('UPDATE emails SET email = :e, name = :n WHERE id = :id');
-                  $st->execute([':e'=>$email, ':n'=>($name !== '' ? $name : null), ':id'=>$id]);
-                  echo '<div style="color:green; margin:8px 0">Saved</div>';
-                } catch (Throwable $upErr) {
-                  echo '<div style="color:#c00; margin:8px 0">Error saving: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
-                }
-              }
-            }
-            // Reload rows after update
-            try {
-              $emStmt = $db->query('SELECT e.id, e.email, e.name FROM emails e ORDER BY e.id DESC');
-              $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-            } catch (Throwable $ign) {}
-          }
-        ?>
-        <?php if (empty($rows)) { ?>
-          <p style="color:#666">No saved emails yet. Visit the INBOX tab to fetch and save.</p>
-        <?php } else { ?>
-          <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Email</th>
-                  <th>Name</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php foreach ($rows as $em) { ?>
-                  <tr>
-                    <td><?php echo (int)$em['id']; ?></td>
-                    <td>
-                      <form action="dashboard.php?tab=emails" method="post" style="display:flex; gap:6px; align-items:center">
-                        <input type="hidden" name="action" value="update_email" />
-                        <input type="hidden" name="id" value="<?php echo (int)$em['id']; ?>" />
-                        <input type="text" name="email" value="<?php echo htmlspecialchars((string)$em['email'], ENT_QUOTES, 'UTF-8'); ?>" style="min-width:260px" required />
-                        <input type="text" name="name" value="<?php echo htmlspecialchars((string)($em['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="min-width:200px" />
-                        <button type="submit">Save</button>
-                      </form>
-                    </td>
-                    <td><?php echo htmlspecialchars((string)($em['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td></td>
-                  </tr>
-                <?php } ?>
-              </tbody>
-            </table>
-          </div>
-        <?php } ?>
-      </section>
+    <?php } else if ($activeTab === 'crm') { ?>
+      <?php include __DIR__ . '/tab_crm_email.php'; ?>
+    <?php } else if ($activeTab === 'admin') { ?>
+      <?php include __DIR__ . '/tab_admin.php'; ?>
     <?php } else if ($activeTab === 'site') { ?>
       <section style="text-align:left; max-width:980px">
         <h2>Site specification</h2>
