@@ -367,13 +367,27 @@ try {
               <h5 class="card-title mb-0">Inbox</h5>
             </div>
             <div class="card-body">
-        <?php
-        $imapSupported = function_exists('imap_open');
-        $emails = [];
-        $imapError = '';
-        if (!$imapSupported) {
-            echo '<div class="alert alert-danger">PHP IMAP extension is not available on this server.</div>';
-        } else {
+              <!-- INBOX Navigation -->
+              <ul class="nav nav-pills mb-4">
+                <li class="nav-item">
+                  <a class="nav-link <?php echo ($_GET['sub'] ?? '') === '' || ($_GET['sub'] ?? '') === 'list' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=list">List</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link <?php echo ($_GET['sub'] ?? '') === 'sent' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=sent">Sent</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link <?php echo ($_GET['sub'] ?? '') === 'settings' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=settings">Settings</a>
+                </li>
+              </ul>
+              <?php
+              $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
+              if ($sub === 'list') {
+                $imapSupported = function_exists('imap_open');
+                $emails = [];
+                $imapError = '';
+                if (!$imapSupported) {
+                    echo '<div class="alert alert-danger">PHP IMAP extension is not available on this server.</div>';
+                } else {
             $cfg = [];
             $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
             if (is_file($cfgFile)) {
@@ -440,42 +454,42 @@ try {
                     }
                     imap_close($inbox);
                 }
-            } else {
-                echo '<div class="alert alert-warning">Missing IMAP credentials. Copy config.example.php to config.local.php and fill in your details.</div>';
-            }
-        }
-        ?>
-        <?php if ($imapError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($imapError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-        <?php if (!empty($emails)) { ?>
-          <div class="table-responsive">
-            <table class="table table-hover email-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>From</th>
-                  <th>Subject</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php foreach ($emails as $em) {
-                      // use row index for view
-                      $viewUrl = 'dashboard.php?tab=inbox&view_idx=' . urlencode((string)$em['index']);
-                   ?>
-                  <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
-                    <td><?php echo (int)$em['index']; ?></td>
-                    <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
-                  </tr>
-                <?php } ?>
-              </tbody>
-            </table>
-          </div>
-          <?php
-            // Detail panel for a selected message
-            $viewIdx = isset($_GET['view_idx']) ? (int)$_GET['view_idx'] : 0;
-            if ($viewIdx > 0) {
+                } else {
+                    echo '<div class="alert alert-warning">Missing IMAP credentials. Copy config.example.php to config.local.php and fill in your details.</div>';
+                }
+              }
+              ?>
+              <?php if ($imapError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($imapError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
+              <?php if (!empty($emails)) { ?>
+                <div class="table-responsive">
+                  <table class="table table-hover email-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>From</th>
+                        <th>Subject</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach ($emails as $em) {
+                            // use row index for view
+                            $viewUrl = 'dashboard.php?tab=inbox&sub=list&view_idx=' . urlencode((string)$em['index']);
+                         ?>
+                        <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
+                          <td><?php echo (int)$em['index']; ?></td>
+                          <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
+                          <td><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
+                          <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                        </tr>
+                      <?php } ?>
+                    </tbody>
+                  </table>
+                </div>
+                <?php
+                  // Detail panel for a selected message
+                  $viewIdx = isset($_GET['view_idx']) ? (int)$_GET['view_idx'] : 0;
+                  if ($viewIdx > 0) {
                 $detail = null; $attachments = [];
                 // reopen IMAP and fetch by index
                 if ($host && $usernameCfg && $passwordCfg) {
@@ -618,9 +632,39 @@ try {
             </div>
           <?php } ?>
           <?php } // end detail panel ?>
-        <?php } else if ($imapSupported && !$imapError) { ?>
-          <p class="text-muted">No emails found.</p>
-        <?php } ?>
+              <?php } else if ($imapSupported && !$imapError) { ?>
+                <p class="text-muted">No emails found.</p>
+              <?php } ?>
+              <?php } else if ($sub === 'sent') { ?>
+                <h6>Sent Emails</h6>
+                <p class="text-muted">Sent emails functionality coming soon.</p>
+              <?php } else if ($sub === 'settings') { ?>
+                <h6>INBOX Settings</h6>
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="card">
+                      <div class="card-header">
+                        <h6 class="card-title mb-0">IMAP Configuration</h6>
+                      </div>
+                      <div class="card-body">
+                        <p class="text-muted">Configure your IMAP settings for email retrieval.</p>
+                        <a href="dashboard.php?tab=admin&sub=database" class="btn btn-outline-primary btn-sm">View Configuration</a>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="card">
+                      <div class="card-header">
+                        <h6 class="card-title mb-0">Email Filters</h6>
+                      </div>
+                      <div class="card-body">
+                        <p class="text-muted">Set up email filtering and organization rules.</p>
+                        <button class="btn btn-outline-secondary btn-sm" disabled>Coming Soon</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <?php } ?>
             </div>
           </div>
         </div>

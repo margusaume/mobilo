@@ -194,7 +194,82 @@ declare(strict_types=1);
           <?php } ?>
         <?php } else { ?>
           <h5>Users</h5>
-          <p class="text-muted">User management functionality coming soon.</p>
+          <?php
+            // Handle user updates
+            if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'admin' && ($_GET['sub'] ?? '') === 'users') {
+              $action = (string)($_POST['action'] ?? '');
+              if ($action === 'update_user') {
+                $userId = (int)($_POST['user_id'] ?? 0);
+                $name = trim((string)($_POST['name'] ?? ''));
+                if ($userId > 0) {
+                  try {
+                    $stmt = $db->prepare('UPDATE users SET name = :name WHERE id = :id');
+                    $stmt->execute([':name' => $name, ':id' => $userId]);
+                    echo '<div class="alert alert-success">User updated successfully.</div>';
+                  } catch (Throwable $e) {
+                    echo '<div class="alert alert-danger">Error updating user: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+                  }
+                }
+              }
+            }
+            
+            // Check if users table has name column, if not add it
+            try {
+              $columns = [];
+              $stmt = $db->query("PRAGMA table_info(users)");
+              while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $columns[] = $row['name'];
+              }
+              if (!in_array('name', $columns, true)) {
+                $db->exec('ALTER TABLE users ADD COLUMN name TEXT');
+              }
+            } catch (Throwable $e) {}
+            
+            // Fetch users
+            $users = [];
+            try {
+              $stmt = $db->query('SELECT id, username, name FROM users ORDER BY id');
+              $users = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            } catch (Throwable $e) {}
+          ?>
+          
+          <?php if (empty($users)) { ?>
+            <p class="text-muted">No users found.</p>
+          <?php } else { ?>
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Name</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($users as $user) { ?>
+                    <tr>
+                      <td><?php echo (int)$user['id']; ?></td>
+                      <td><?php echo htmlspecialchars((string)$user['username'], ENT_QUOTES, 'UTF-8'); ?></td>
+                      <td>
+                        <form action="dashboard.php?tab=admin&sub=users" method="post" class="d-inline">
+                          <input type="hidden" name="action" value="update_user" />
+                          <input type="hidden" name="user_id" value="<?php echo (int)$user['id']; ?>" />
+                          <div class="input-group">
+                            <input type="text" name="name" value="<?php echo htmlspecialchars((string)($user['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" class="form-control form-control-sm" placeholder="Enter name" />
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+                          </div>
+                        </form>
+                      </td>
+                      <td>
+                        <span class="badge bg-secondary">User</span>
+                      </td>
+                    </tr>
+                  <?php } ?>
+                </tbody>
+              </table>
+            </div>
+          <?php } ?>
         <?php } ?>
       </div>
     </div>
