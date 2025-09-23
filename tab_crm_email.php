@@ -82,7 +82,6 @@ declare(strict_types=1);
               <td></td>
             </tr>
           <?php } ?>
-          <?php } ?>
         </tbody>
       </table>
     </div>
