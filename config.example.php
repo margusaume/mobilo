@@ -11,8 +11,8 @@ return [
         'port' => 993,
         // one of: 'ssl', 'tls', 'starttls', or 'none'
         'encryption' => 'ssl',
-        'username' => 'info@example.com',
-        'password' => 'REPLACE_ME',
+        'username' => 'info@teenus.ee',
+        'password' => 'Yyd12321df42Xgus9WHT8xhic',
         // Optional: validate certs; some shared hosts may need novalidate-cert
         'validate_cert' => false,
         // Max emails to fetch per page
@@ -23,8 +23,8 @@ return [
         'host' => 'smtp.zone.eu',
         'port' => 465,
         'encryption' => 'ssl', // or 'starttls'
-        'username' => 'info@example.com',
-        'password' => 'REPLACE_ME',
+        'username' => 'info@teenus.ee',
+        'password' => 'Yyd12321df42Xgus9WHT8xhic',
     ],
 ];
 
