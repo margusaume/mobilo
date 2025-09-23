@@ -46,6 +46,7 @@ declare(strict_types=1);
             echo '<div style="color:#c00; margin:8px 0">Error saving: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
           }
         }
+      }
       try {
         $emStmt = $db->query('SELECT e.id, e.email, e.name FROM emails e ORDER BY e.id DESC');
         $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
