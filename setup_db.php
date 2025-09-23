@@ -6,7 +6,10 @@ require_once __DIR__ . '/inc/db.php';
 try {
     $db = getDatabaseConnection();
     
+    echo "Starting database setup...<br>";
+    
     // Create all necessary tables
+    echo "Creating tables...<br>";
     $db->exec('CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
@@ -75,13 +78,18 @@ try {
         UNIQUE(email_id, company_id)
     )');
 
+    echo "Adding missing columns...<br>";
+    
     // Add company column to emails table if it doesn't exist
     try {
         $db->exec('ALTER TABLE emails ADD COLUMN company TEXT');
+        echo "Added company column to emails table<br>";
     } catch (Throwable $e) {
-        // Column might already exist, ignore error
+        echo "Company column already exists in emails table<br>";
     }
 
+    echo "Seeding data...<br>";
+    
     // Seed a user only if missing
     $stmt = $db->prepare('SELECT COUNT(1) AS c FROM users WHERE username = :u');
     $stmt->execute([':u' => 'demo']);
@@ -95,13 +103,43 @@ try {
             ':p' => $passwordHash,
             ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
         ]);
+        echo "Created demo user<br>";
+    } else {
+        echo "Demo user already exists<br>";
     }
 
-    // Insert some sample email statuses
-    $statuses = ['new', 'read', 'replied', 'ignore', 'marketing'];
-    foreach ($statuses as $status) {
-        $stmt = $db->prepare('INSERT OR IGNORE INTO email_statuses (name, created_at) VALUES (:n, :t)');
-        $stmt->execute([':n' => $status, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+    // Check if email_statuses table has name column, if not add it
+    try {
+        $checkColumn = $db->query("PRAGMA table_info(email_statuses)");
+        $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+        $hasNameColumn = false;
+        foreach ($columns as $col) {
+            if ($col['name'] === 'name') {
+                $hasNameColumn = true;
+                break;
+            }
+        }
+        
+        if (!$hasNameColumn) {
+            $db->exec('ALTER TABLE email_statuses ADD COLUMN name TEXT');
+            echo "Added name column to email_statuses table<br>";
+        } else {
+            echo "Name column already exists in email_statuses table<br>";
+        }
+        
+        // Insert some sample email statuses
+        $statuses = ['new', 'read', 'replied', 'ignore', 'marketing'];
+        $insertedCount = 0;
+        foreach ($statuses as $status) {
+            $stmt = $db->prepare('INSERT OR IGNORE INTO email_statuses (name, created_at) VALUES (:n, :t)');
+            $result = $stmt->execute([':n' => $status, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+            if ($stmt->rowCount() > 0) {
+                $insertedCount++;
+            }
+        }
+        echo "Inserted {$insertedCount} email statuses<br>";
+    } catch (Throwable $e) {
+        echo "Note: Could not update email_statuses table: " . $e->getMessage() . "<br>";
     }
 
     echo "Database setup completed successfully!<br>";
