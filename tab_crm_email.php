@@ -52,6 +52,27 @@ declare(strict_types=1);
               echo '<div style="color:#c00; margin:8px 0">Error adding company: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
             }
           }
+        } else if ($act === 'add_person') {
+          $name = trim((string)($_POST['name'] ?? ''));
+          if ($name !== '') {
+            try {
+              // Check if person already exists
+              $personStmt = $db->prepare('SELECT id FROM people WHERE name = :n');
+              $personStmt->execute([':n' => $name]);
+              $existing = $personStmt->fetch();
+              
+              if (!$existing) {
+                // Add new person
+                $insPerson = $db->prepare('INSERT INTO people (name, created_at) VALUES (:n, :t)');
+                $insPerson->execute([':n' => $name, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                echo '<div style="color:green; margin:8px 0">Person added: ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>';
+              } else {
+                echo '<div style="color:orange; margin:8px 0">Person already exists: ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>';
+              }
+            } catch (Throwable $e) {
+              echo '<div style="color:#c00; margin:8px 0">Error adding person: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+          }
         }
       }
       
@@ -83,6 +104,7 @@ declare(strict_types=1);
             <th>Email</th>
             <th>Domain</th>
             <th>Name</th>
+            <th>People</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -130,6 +152,30 @@ declare(strict_types=1);
                 <?php } ?>
               </td>
               <td><?php echo htmlspecialchars((string)($em['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+              <td>
+                <?php 
+                  $name = trim((string)($em['name'] ?? ''));
+                  if ($name !== '') {
+                    // Check if person already exists in people table
+                    $personExists = false;
+                    try {
+                      $personStmt = $db->prepare('SELECT id FROM people WHERE name = :n');
+                      $personStmt->execute([':n' => $name]);
+                      $personExists = $personStmt->fetch() !== false;
+                    } catch (Throwable $e) {
+                      // Ignore errors
+                    }
+                ?>
+                  <button type="button" 
+                          onclick="addPerson(<?php echo (int)$em['id']; ?>, '<?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>')"
+                          style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; cursor: pointer; background-color: <?php echo $personExists ? '#d4edda' : '#f8f9fa'; ?>; color: <?php echo $personExists ? '#155724' : '#6c757d'; ?>;"
+                          id="person-btn-<?php echo (int)$em['id']; ?>">
+                    <?php echo $personExists ? '✓ Added' : '+ Add'; ?>
+                  </button>
+                <?php } else { ?>
+                  <span style="color: #999; font-size: 11px;">No name</span>
+                <?php } ?>
+              </td>
               <td></td>
             </tr>
           <?php } ?>
@@ -138,9 +184,51 @@ declare(strict_types=1);
     </div>
   <?php } ?>
   
-  <?php } else if ($sub === 'people') { ?>
+  <?php } else if ($sub === 'people') { 
+    // Fetch people from database
+    $people = [];
+    $peopleDebugInfo = '';
+    try {
+      $peopleStmt = $db->query('SELECT id, name, created_at FROM people ORDER BY id DESC');
+      $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+      $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people.';
+    } catch (Throwable $e) {
+      $peopleDebugInfo = 'Database error: ' . $e->getMessage();
+    }
+  ?>
     <h3>People</h3>
-    <p style="color:#666">People management coming soon.</p>
+    <div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">
+      Debug: <?php echo htmlspecialchars($peopleDebugInfo, ENT_QUOTES, 'UTF-8'); ?>
+    </div>
+    
+    <?php if (empty($people)) { ?>
+      <p style="color:#666">No people yet. Add some names from the Email tab.</p>
+    <?php } else { ?>
+      <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($people as $person) { ?>
+              <tr>
+                <td><?php echo (int)$person['id']; ?></td>
+                <td><?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td><?php echo htmlspecialchars((string)($person['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td>
+                  <span style="color: #28a745; font-size: 12px;">✓ Active</span>
+                </td>
+              </tr>
+            <?php } ?>
+          </tbody>
+        </table>
+      </div>
+    <?php } ?>
   <?php } else if ($sub === 'organisations') { 
     // Fetch companies from database
     $companies = [];
@@ -214,6 +302,29 @@ function addCompany(id, domain) {
   
   form.appendChild(actionInput);
   form.appendChild(domainInput);
+  
+  document.body.appendChild(form);
+  form.submit();
+}
+
+function addPerson(id, name) {
+  // Create a form and submit it
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'dashboard.php?tab=crm&sub=email';
+  
+  const actionInput = document.createElement('input');
+  actionInput.type = 'hidden';
+  actionInput.name = 'action';
+  actionInput.value = 'add_person';
+  
+  const nameInput = document.createElement('input');
+  nameInput.type = 'hidden';
+  nameInput.name = 'name';
+  nameInput.value = name;
+  
+  form.appendChild(actionInput);
+  form.appendChild(nameInput);
   
   document.body.appendChild(form);
   form.submit();
