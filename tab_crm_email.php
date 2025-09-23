@@ -31,6 +31,27 @@ declare(strict_types=1);
               echo '<div style="color:#c00; margin:8px 0">Error saving: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
             }
           }
+        } else if ($act === 'add_company') {
+          $domain = trim((string)($_POST['domain'] ?? ''));
+          if ($domain !== '') {
+            try {
+              // Check if company already exists
+              $compStmt = $db->prepare('SELECT id FROM companies WHERE domain = :d');
+              $compStmt->execute([':d' => $domain]);
+              $existing = $compStmt->fetch();
+              
+              if (!$existing) {
+                // Add new company
+                $insComp = $db->prepare('INSERT INTO companies (domain, name, created_at) VALUES (:d, :n, :t)');
+                $insComp->execute([':d' => $domain, ':n' => $domain, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                echo '<div style="color:green; margin:8px 0">Company added: ' . htmlspecialchars($domain, ENT_QUOTES, 'UTF-8') . '</div>';
+              } else {
+                echo '<div style="color:orange; margin:8px 0">Company already exists: ' . htmlspecialchars($domain, ENT_QUOTES, 'UTF-8') . '</div>';
+              }
+            } catch (Throwable $e) {
+              echo '<div style="color:#c00; margin:8px 0">Error adding company: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+          }
         }
       }
       
@@ -89,6 +110,24 @@ declare(strict_types=1);
                 <span style="background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">
                   <?php echo htmlspecialchars($domain, ENT_QUOTES, 'UTF-8'); ?>
                 </span>
+                <?php if ($domain !== '') { 
+                  // Check if domain already exists in companies table
+                  $companyExists = false;
+                  try {
+                    $compStmt = $db->prepare('SELECT id FROM companies WHERE domain = :d');
+                    $compStmt->execute([':d' => $domain]);
+                    $companyExists = $compStmt->fetch() !== false;
+                  } catch (Throwable $e) {
+                    // Ignore errors
+                  }
+                ?>
+                  <button type="button" 
+                          onclick="addCompany(<?php echo (int)$em['id']; ?>, '<?php echo htmlspecialchars($domain, ENT_QUOTES, 'UTF-8'); ?>')"
+                          style="margin-left: 8px; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; cursor: pointer; background-color: <?php echo $companyExists ? '#d4edda' : '#f8f9fa'; ?>; color: <?php echo $companyExists ? '#155724' : '#6c757d'; ?>;"
+                          id="company-btn-<?php echo (int)$em['id']; ?>">
+                    <?php echo $companyExists ? '✓ Added' : '+ Add'; ?>
+                  </button>
+                <?php } ?>
               </td>
               <td><?php echo htmlspecialchars((string)($em['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
               <td></td>
@@ -107,3 +146,28 @@ declare(strict_types=1);
     <p style="color:#666">Organisation management coming soon.</p>
   <?php } ?>
 </section>
+
+<script>
+function addCompany(id, domain) {
+  // Create a form and submit it
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = 'dashboard.php?tab=crm&sub=email';
+  
+  const actionInput = document.createElement('input');
+  actionInput.type = 'hidden';
+  actionInput.name = 'action';
+  actionInput.value = 'add_company';
+  
+  const domainInput = document.createElement('input');
+  domainInput.type = 'hidden';
+  domainInput.name = 'domain';
+  domainInput.value = domain;
+  
+  form.appendChild(actionInput);
+  form.appendChild(domainInput);
+  
+  document.body.appendChild(form);
+  form.submit();
+}
+</script>
