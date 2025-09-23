@@ -85,7 +85,7 @@ declare(strict_types=1);
         </tbody>
       </table>
     </div>
-  <?php } ?>
+  
   <?php } else if ($sub === 'people') { ?>
     <h3>People</h3>
     <p style="color:#666">People management coming soon.</p>
