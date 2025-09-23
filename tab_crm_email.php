@@ -10,49 +10,47 @@ declare(strict_types=1);
     <a href="dashboard.php?tab=crm&sub=people" style="text-decoration:none; padding:6px 10px; border:1px solid #ddd; border-radius:6px">People</a>
     <a href="dashboard.php?tab=crm&sub=organisations" style="text-decoration:none; padding:6px 10px; border:1px solid #ddd; border-radius:6px">Organisations</a>
   </nav>
+  
   <?php
     $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'email';
+    
     if ($sub === 'email') {
-  ?>
-  <h3>Email (Contacts)</h3>
-  <?php
-    $rows = [];
-    $debugInfo = '';
-    try {
-      $emStmt = $db->query('SELECT e.id, e.email, e.name FROM emails e ORDER BY e.id DESC');
-      $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-      $debugInfo = 'Query executed successfully. Found ' . count($rows) . ' rows.';
-    } catch (Throwable $e) {
-      $debugInfo = 'Database error: ' . $e->getMessage();
-    }
-  ?>
-  <div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">
-    Debug: <?php echo htmlspecialchars($debugInfo, ENT_QUOTES, 'UTF-8'); ?>
-  </div>
-
-  <?php
-    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'crm' && ($_GET['sub'] ?? '') === 'email') {
-      $act = (string)($_POST['action'] ?? '');
-      if ($act === 'update_email') {
-        $id = (int)($_POST['id'] ?? 0);
-        $email = strtolower(trim((string)($_POST['email'] ?? '')));
-        $name = trim((string)($_POST['name'] ?? ''));
-        if ($id > 0 && $email !== '') {
-          try {
-            $st = $db->prepare('UPDATE emails SET email = :e, name = :n WHERE id = :id');
-            $st->execute([':e'=>$email, ':n'=>($name !== '' ? $name : null), ':id'=>$id]);
-            echo '<div style="color:green; margin:8px 0">Saved</div>';
-          } catch (Throwable $upErr) {
-            echo '<div style="color:#c00; margin:8px 0">Error saving: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+      // Handle POST requests for email updates
+      if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'crm' && ($_GET['sub'] ?? '') === 'email') {
+        $act = (string)($_POST['action'] ?? '');
+        if ($act === 'update_email') {
+          $id = (int)($_POST['id'] ?? 0);
+          $email = strtolower(trim((string)($_POST['email'] ?? '')));
+          $name = trim((string)($_POST['name'] ?? ''));
+          if ($id > 0 && $email !== '') {
+            try {
+              $st = $db->prepare('UPDATE emails SET email = :e, name = :n WHERE id = :id');
+              $st->execute([':e'=>$email, ':n'=>($name !== '' ? $name : null), ':id'=>$id]);
+              echo '<div style="color:green; margin:8px 0">Saved</div>';
+            } catch (Throwable $upErr) {
+              echo '<div style="color:#c00; margin:8px 0">Error saving: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
           }
         }
       }
+      
+      // Fetch emails from database
+      $rows = [];
+      $debugInfo = '';
       try {
         $emStmt = $db->query('SELECT e.id, e.email, e.name FROM emails e ORDER BY e.id DESC');
         $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-      } catch (Throwable $ign) {}
-    }
+        $debugInfo = 'Query executed successfully. Found ' . count($rows) . ' rows.';
+      } catch (Throwable $e) {
+        $debugInfo = 'Database error: ' . $e->getMessage();
+      }
   ?>
+  
+  <h3>Email (Contacts)</h3>
+  <div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">
+    Debug: <?php echo htmlspecialchars($debugInfo, ENT_QUOTES, 'UTF-8'); ?>
+  </div>
+  
   <?php if (empty($rows)) { ?>
     <p style="color:#666">No contacts yet. Fetch some emails in INBOX.</p>
   <?php } else { ?>
@@ -86,6 +84,8 @@ declare(strict_types=1);
         </tbody>
       </table>
     </div>
+  <?php } ?>
+  
   <?php } else if ($sub === 'people') { ?>
     <h3>People</h3>
     <p style="color:#666">People management coming soon.</p>
@@ -94,6 +94,3 @@ declare(strict_types=1);
     <p style="color:#666">Organisation management coming soon.</p>
   <?php } ?>
 </section>
-
-
-
