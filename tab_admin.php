@@ -14,7 +14,7 @@ declare(strict_types=1);
     if ($sub === 'docs') {
         $dataModelPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'data-model.md';
         $uiBehaviorPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'ui-behavior.md';
-        $renderMd = function(string $path): string {
+        $renderMd = function($path) {
             if (!is_file($path)) { return '<p style="color:#666">Missing: ' . htmlspecialchars(basename($path), ENT_QUOTES, 'UTF-8') . '</p>'; }
             $txt = (string)@file_get_contents($path);
             $safe = htmlspecialchars($txt, ENT_QUOTES, 'UTF-8');
