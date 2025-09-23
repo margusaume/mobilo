@@ -188,6 +188,58 @@ declare(strict_types=1);
     include __DIR__ . '/tab_crm_people.php';
   ?>
   <?php } else if ($sub === 'organisations') { 
+    // Handle POST requests for company updates
+    if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'crm' && ($_GET['sub'] ?? '') === 'organisations') {
+      $act = (string)($_POST['action'] ?? '');
+      
+      if ($act === 'update_company') {
+        $id = (int)($_POST['id'] ?? 0);
+        $name = trim((string)($_POST['name'] ?? ''));
+        $fullName = trim((string)($_POST['full_name'] ?? ''));
+        $importance = trim((string)($_POST['importance'] ?? ''));
+        $registryCode = trim((string)($_POST['registry_code'] ?? ''));
+        $address = trim((string)($_POST['address'] ?? ''));
+        
+        if ($id > 0) {
+          try {
+            // Check if new columns exist, if not add them
+            $checkColumn = $db->query("PRAGMA table_info(companies)");
+            $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+            $existingColumns = array_column($columns, 'name');
+            
+            $newColumns = [
+              'full_name' => 'TEXT',
+              'importance' => 'TEXT',
+              'registry_code' => 'TEXT',
+              'address' => 'TEXT',
+              'logo_path' => 'TEXT'
+            ];
+            
+            foreach ($newColumns as $colName => $colType) {
+              if (!in_array($colName, $existingColumns)) {
+                $db->exec("ALTER TABLE companies ADD COLUMN {$colName} {$colType}");
+              }
+            }
+            
+            // Update company information
+            $st = $db->prepare('UPDATE companies SET name = :n, full_name = :fn, importance = :imp, registry_code = :rc, address = :addr WHERE id = :id');
+            $st->execute([
+              ':n' => $name,
+              ':fn' => $fullName,
+              ':imp' => $importance,
+              ':rc' => $registryCode,
+              ':addr' => $address,
+              ':id' => $id
+            ]);
+            
+            echo '<div style="color:green; margin:8px 0">✓ Company information updated successfully</div>';
+          } catch (Throwable $upErr) {
+            echo '<div style="color:#c00; margin:8px 0">Error updating company: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+          }
+        }
+      }
+    }
+    
     // Fetch companies from database with connected people
     $companies = [];
     $companyDebugInfo = '';
@@ -204,17 +256,17 @@ declare(strict_types=1);
       }
       
       if ($hasCompanyIdColumn) {
-        $compStmt = $db->query('SELECT c.id, c.domain, c.name, c.created_at, 
+        $compStmt = $db->query('SELECT c.id, c.domain, c.name, c.full_name, c.importance, c.registry_code, c.address, c.logo_path, c.created_at, 
                                        GROUP_CONCAT(p.name, ", ") as connected_people,
                                        COUNT(p.id) as people_count
                                 FROM companies c 
                                 LEFT JOIN people p ON c.id = p.company_id 
-                                GROUP BY c.id, c.domain, c.name, c.created_at
+                                GROUP BY c.id, c.domain, c.name, c.full_name, c.importance, c.registry_code, c.address, c.logo_path, c.created_at
                                 ORDER BY c.id DESC');
         $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies with people connections.';
       } else {
-        $compStmt = $db->query('SELECT id, domain, name, created_at FROM companies ORDER BY id DESC');
+        $compStmt = $db->query('SELECT id, domain, name, full_name, importance, registry_code, address, logo_path, created_at FROM companies ORDER BY id DESC');
         $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies. Company connections not available - <a href="setup_db.php">run setup</a>.';
       }
@@ -231,28 +283,92 @@ declare(strict_types=1);
       <p style="color:#666">No organisations yet. Add some companies from the Email tab.</p>
     <?php } else { ?>
       <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
-        <table>
+        <table style="width: 100%; border-collapse: collapse;">
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Domain</th>
-              <th>Name</th>
-              <th>Connected People</th>
-              <th>Created</th>
-              <th>Actions</th>
+            <tr style="background-color: #f8f9fa;">
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">ID</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Domain</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Name</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Full Name</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Importance</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Registry Code</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Address</th>
+              <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Connected People</th>
             </tr>
           </thead>
           <tbody>
             <?php foreach ($companies as $company) { ?>
               <tr>
-                <td><?php echo (int)$company['id']; ?></td>
-                <td>
+                <td style="padding: 12px; border: 1px solid #ddd;"><?php echo (int)$company['id']; ?></td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
                   <span style="background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">
                     <?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>
                   </span>
                 </td>
-                <td><?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                <td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
+                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="action" value="update_company" />
+                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                    <input type="text" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
+                           style="min-width: 120px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
+                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                  </form>
+                </td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
+                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="action" value="update_company" />
+                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="text" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
+                           style="min-width: 150px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
+                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                  </form>
+                </td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
+                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="action" value="update_company" />
+                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <select name="importance" onchange="this.form.submit()" style="min-width: 100px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                      <option value="">-- Select --</option>
+                      <option value="High" <?php echo (($company['importance'] ?? '') === 'High') ? 'selected' : ''; ?>>High</option>
+                      <option value="Medium" <?php echo (($company['importance'] ?? '') === 'Medium') ? 'selected' : ''; ?>>Medium</option>
+                      <option value="Low" <?php echo (($company['importance'] ?? '') === 'Low') ? 'selected' : ''; ?>>Low</option>
+                    </select>
+                  </form>
+                </td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
+                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="action" value="update_company" />
+                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="text" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
+                           style="min-width: 120px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
+                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                  </form>
+                </td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
+                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="hidden" name="action" value="update_company" />
+                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                    <textarea name="address" style="min-width: 200px; min-height: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"><?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                  </form>
+                </td>
+                <td style="padding: 12px; border: 1px solid #ddd;">
                   <?php if ($hasCompanyIdColumn && isset($company['connected_people']) && $company['connected_people'] !== null) { 
                     $peopleCount = (int)($company['people_count'] ?? 0);
                     $peopleList = (string)$company['connected_people'];
@@ -278,10 +394,6 @@ declare(strict_types=1);
                   <?php } else { ?>
                     <span style="color: #999; font-size: 12px;">No connections</span>
                   <?php } ?>
-                </td>
-                <td><?php echo htmlspecialchars((string)($company['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                <td>
-                  <span style="color: #28a745; font-size: 12px;">✓ Active</span>
                 </td>
               </tr>
             <?php } ?>
