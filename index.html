@@ -23,6 +23,25 @@
     <div style="margin-top:16px">
       <a href="page_1.php" target="_blank" rel="noopener">helloworld</a>
     </div>
+    <hr style="margin:24px 0; width:260px; border:none; border-top:1px solid #ddd" />
+    <form action="login.php" method="post" style="display:inline-block; text-align:left; width:260px">
+      <div style="margin-bottom:8px">
+        <label for="username" style="display:block; font-size:14px; color:#444">Username</label>
+        <input id="username" name="username" type="text" required style="width:100%; padding:8px; box-sizing:border-box" />
+      </div>
+      <div style="margin-bottom:12px">
+        <label for="password" style="display:block; font-size:14px; color:#444">Password</label>
+        <input id="password" name="password" type="password" required style="width:100%; padding:8px; box-sizing:border-box" />
+      </div>
+      <button type="submit" style="width:100%; padding:10px; cursor:pointer">Log in</button>
+      <div style="margin-top:8px; color:#c00; font-size:13px">
+        <!-- Shows a basic error message when login.php redirects back with ?error=1 -->
+        <script>
+          const params = new URLSearchParams(window.location.search);
+          if (params.get('error') === '1') document.write('Invalid username or password');
+        </script>
+      </div>
+    </form>
   </main>
 </body>
 </html>
