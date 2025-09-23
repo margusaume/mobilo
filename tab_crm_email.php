@@ -77,11 +77,35 @@ declare(strict_types=1);
           $id = (int)($_POST['id'] ?? 0);
           $name = trim((string)($_POST['name'] ?? ''));
           $companyId = (int)($_POST['company_id'] ?? 0);
+          
+          // Debug info
+          echo '<div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">';
+          echo 'Debug: ID=' . $id . ', Name=' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ', CompanyID=' . $companyId;
+          echo '</div>';
+          
           if ($id > 0 && $name !== '') {
             try {
-              $st = $db->prepare('UPDATE people SET name = :n, company_id = :c WHERE id = :id');
-              $st->execute([':n'=>$name, ':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
-              echo '<div style="color:green; margin:8px 0">Person updated</div>';
+              // First check if company_id column exists
+              $checkColumn = $db->query("PRAGMA table_info(people)");
+              $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+              $hasCompanyIdColumn = false;
+              foreach ($columns as $col) {
+                if ($col['name'] === 'company_id') {
+                  $hasCompanyIdColumn = true;
+                  break;
+                }
+              }
+              
+              if ($hasCompanyIdColumn) {
+                $st = $db->prepare('UPDATE people SET name = :n, company_id = :c WHERE id = :id');
+                $st->execute([':n'=>$name, ':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
+                echo '<div style="color:green; margin:8px 0">Person updated with company connection</div>';
+              } else {
+                // Fallback: update only name if company_id column doesn't exist
+                $st = $db->prepare('UPDATE people SET name = :n WHERE id = :id');
+                $st->execute([':n'=>$name, ':id'=>$id]);
+                echo '<div style="color:orange; margin:8px 0">Person name updated, but company_id column missing. <a href="setup_db.php">Run database setup</a> to add company connections.</div>';
+              }
             } catch (Throwable $upErr) {
               echo '<div style="color:#c00; margin:8px 0">Error updating person: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
             }
@@ -202,12 +226,30 @@ declare(strict_types=1);
     $people = [];
     $peopleDebugInfo = '';
     try {
-      $peopleStmt = $db->query('SELECT p.id, p.name, p.company_id, p.created_at, c.name as company_name, c.domain as company_domain 
-                                FROM people p 
-                                LEFT JOIN companies c ON p.company_id = c.id 
-                                ORDER BY p.id DESC');
-      $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-      $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people.';
+      // First check if company_id column exists
+      $checkColumn = $db->query("PRAGMA table_info(people)");
+      $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+      $hasCompanyIdColumn = false;
+      foreach ($columns as $col) {
+        if ($col['name'] === 'company_id') {
+          $hasCompanyIdColumn = true;
+          break;
+        }
+      }
+      
+      if ($hasCompanyIdColumn) {
+        $peopleStmt = $db->query('SELECT p.id, p.name, p.company_id, p.created_at, c.name as company_name, c.domain as company_domain 
+                                  FROM people p 
+                                  LEFT JOIN companies c ON p.company_id = c.id 
+                                  ORDER BY p.id DESC');
+        $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people. Company_id column exists.';
+      } else {
+        // Fallback query without company_id
+        $peopleStmt = $db->query('SELECT id, name, created_at FROM people ORDER BY id DESC');
+        $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people. Company_id column missing - <a href="setup_db.php">run setup</a>.';
+      }
     } catch (Throwable $e) {
       $peopleDebugInfo = 'Database error: ' . $e->getMessage();
     }
@@ -248,34 +290,38 @@ declare(strict_types=1);
                   <input type="text" name="name_<?php echo (int)$person['id']; ?>" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" style="min-width:200px" required />
                 </td>
                 <td>
-                  <div style="position: relative; min-width:200px">
-                    <input type="text" id="company_search_<?php echo (int)$person['id']; ?>" 
-                           placeholder="Search companies..." 
-                           style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"
-                           onkeyup="filterCompanies(<?php echo (int)$person['id']; ?>)"
-                           onfocus="showCompanyDropdown(<?php echo (int)$person['id']; ?>)"
-                           onblur="setTimeout(() => hideCompanyDropdown(<?php echo (int)$person['id']; ?>), 200)"
-                           value="<?php 
-                             if ((int)$person['company_id'] > 0) {
-                               echo htmlspecialchars((string)($person['company_name'] ?? '') . ' (' . (string)($person['company_domain'] ?? '') . ')', ENT_QUOTES, 'UTF-8');
-                             }
-                           ?>" />
-                    <div id="company_dropdown_<?php echo (int)$person['id']; ?>" 
-                         style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-top: none; max-height: 200px; overflow-y: auto; z-index: 1000;">
-                      <div class="company-option" data-id="0" data-name="-- No Company --" onclick="selectCompany(<?php echo (int)$person['id']; ?>, 0, '-- No Company --')" 
-                           style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === 0) ? 'background-color: #f0f0f0;' : ''; ?>">
-                        -- No Company --
-                      </div>
-                      <?php foreach ($companies as $company) { ?>
-                        <div class="company-option" data-id="<?php echo (int)$company['id']; ?>" data-name="<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>" 
-                             onclick="selectCompany(<?php echo (int)$person['id']; ?>, <?php echo (int)$company['id']; ?>, '<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>')"
-                             style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === (int)$company['id']) ? 'background-color: #f0f0f0;' : ''; ?>">
-                          <?php echo htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8'); ?> (<?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>)
+                  <?php if ($hasCompanyIdColumn) { ?>
+                    <div style="position: relative; min-width:200px">
+                      <input type="text" id="company_search_<?php echo (int)$person['id']; ?>" 
+                             placeholder="Search companies..." 
+                             style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"
+                             onkeyup="filterCompanies(<?php echo (int)$person['id']; ?>)"
+                             onfocus="showCompanyDropdown(<?php echo (int)$person['id']; ?>)"
+                             onblur="setTimeout(() => hideCompanyDropdown(<?php echo (int)$person['id']; ?>), 200)"
+                             value="<?php 
+                               if ((int)$person['company_id'] > 0) {
+                                 echo htmlspecialchars((string)($person['company_name'] ?? '') . ' (' . (string)($person['company_domain'] ?? '') . ')', ENT_QUOTES, 'UTF-8');
+                               }
+                             ?>" />
+                      <div id="company_dropdown_<?php echo (int)$person['id']; ?>" 
+                           style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-top: none; max-height: 200px; overflow-y: auto; z-index: 1000;">
+                        <div class="company-option" data-id="0" data-name="-- No Company --" onclick="selectCompany(<?php echo (int)$person['id']; ?>, 0, '-- No Company --')" 
+                             style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === 0) ? 'background-color: #f0f0f0;' : ''; ?>">
+                          -- No Company --
                         </div>
-                      <?php } ?>
+                        <?php foreach ($companies as $company) { ?>
+                          <div class="company-option" data-id="<?php echo (int)$company['id']; ?>" data-name="<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>" 
+                               onclick="selectCompany(<?php echo (int)$person['id']; ?>, <?php echo (int)$company['id']; ?>, '<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>')"
+                               style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === (int)$company['id']) ? 'background-color: #f0f0f0;' : ''; ?>">
+                            <?php echo htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8'); ?> (<?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>)
+                          </div>
+                        <?php } ?>
+                      </div>
+                      <input type="hidden" id="selected_company_<?php echo (int)$person['id']; ?>" value="<?php echo (int)$person['company_id']; ?>" />
                     </div>
-                    <input type="hidden" id="selected_company_<?php echo (int)$person['id']; ?>" value="<?php echo (int)$person['company_id']; ?>" />
-                  </div>
+                  <?php } else { ?>
+                    <span style="color: #999; font-size: 12px;">Company connections not available<br><a href="setup_db.php" style="font-size: 10px;">Run database setup</a></span>
+                  <?php } ?>
                 </td>
                 <td><?php echo htmlspecialchars((string)($person['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                 <td>
