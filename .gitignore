@@ -1,0 +1,9 @@
+app.sqlite
+storage/
+uploads/
+config.local.php
+.DS_Store
+Thumbs.db
+*.log
+
+

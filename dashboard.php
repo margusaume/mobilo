@@ -10,7 +10,13 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $username = htmlspecialchars((string)($_SESSION['username'] ?? 'user'), ENT_QUOTES, 'UTF-8');
-$activeTab = isset($_GET['tab']) && $_GET['tab'] === 'channels' ? 'channels' : 'users';
+$activeTab = 'users';
+if (isset($_GET['tab'])) {
+    $tab = $_GET['tab'];
+    if ($tab === 'channels' || $tab === 'inbox' || $tab === 'users') {
+        $activeTab = $tab;
+    }
+}
 
 // Prepare DB, create channels table if missing, and handle create action
 $tables = [];
@@ -121,6 +127,7 @@ try {
     <nav class="nav">
       <a href="dashboard.php?tab=users" class="<?php echo $activeTab==='users'?'active':''; ?>">Users</a>
       <a href="dashboard.php?tab=channels" class="<?php echo $activeTab==='channels'?'active':''; ?>">Channels</a>
+      <a href="dashboard.php?tab=inbox" class="<?php echo $activeTab==='inbox'?'active':''; ?>">INBOX</a>
     </nav>
 
     <?php if ($activeTab === 'channels') { ?>
@@ -176,6 +183,88 @@ try {
               </tbody>
             </table>
           </div>
+        <?php } ?>
+      </section>
+    <?php } else if ($activeTab === 'inbox') { ?>
+      <section style="text-align:left; max-width:920px">
+        <h2>Inbox</h2>
+        <?php
+        $imapSupported = function_exists('imap_open');
+        $emails = [];
+        $imapError = '';
+        if (!$imapSupported) {
+            echo '<p style="color:#c00">PHP IMAP extension is not available on this server.</p>';
+        } else {
+            $cfg = [];
+            $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
+            if (is_file($cfgFile)) {
+                $cfg = require $cfgFile;
+            }
+            $imapCfg = $cfg['imap'] ?? [];
+            $host = (string)($imapCfg['host'] ?? '');
+            $port = (int)($imapCfg['port'] ?? 993);
+            $encryption = strtolower((string)($imapCfg['encryption'] ?? 'ssl'));
+            $usernameCfg = (string)($imapCfg['username'] ?? '');
+            $passwordCfg = (string)($imapCfg['password'] ?? '');
+            $validateCert = (bool)($imapCfg['validate_cert'] ?? false);
+            $limit = (int)($imapCfg['limit'] ?? 20);
+
+            if ($host && $usernameCfg && $passwordCfg) {
+                $flags = '/imap';
+                if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
+                if ($encryption === 'starttls') { $flags .= '/tls'; }
+                if (!$validateCert) { $flags .= '/novalidate-cert'; }
+                $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
+                $inbox = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, [
+                    'DISABLE_AUTHENTICATOR' => 'gssapi'
+                ]);
+                if ($inbox === false) {
+                    $imapError = imap_last_error() ?: 'Unable to connect to mailbox.';
+                } else {
+                    $num = imap_num_msg($inbox);
+                    $start = max(1, $num - $limit + 1);
+                    for ($i = $num; $i >= $start; $i--) {
+                        $overview = imap_headerinfo($inbox, $i);
+                        $emails[] = [
+                            'index' => $i,
+                            'from' => isset($overview->fromaddress) ? (string)$overview->fromaddress : '',
+                            'subject' => isset($overview->subject) ? (string)imap_utf8($overview->subject) : '',
+                            'date' => isset($overview->date) ? (string)$overview->date : '',
+                        ];
+                    }
+                    imap_close($inbox);
+                }
+            } else {
+                echo '<p style="color:#c00">Missing IMAP credentials. Copy config.example.php to config.local.php and fill in your details.</p>';
+            }
+        }
+        ?>
+        <?php if ($imapError) { ?><div style="color:#c00; margin:8px 0"><?php echo htmlspecialchars($imapError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
+        <?php if (!empty($emails)) { ?>
+          <div style="overflow:auto; border:1px solid #ddd; border-radius:6px">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>From</th>
+                  <th>Subject</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                <?php foreach ($emails as $em) { ?>
+                  <tr>
+                    <td><?php echo (int)$em['index']; ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                  </tr>
+                <?php } ?>
+              </tbody>
+            </table>
+          </div>
+        <?php } else if ($imapSupported && !$imapError) { ?>
+          <p style="color:#666">No emails found.</p>
         <?php } ?>
       </section>
     <?php } else { ?>
