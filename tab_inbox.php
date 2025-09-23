@@ -114,6 +114,7 @@ declare(strict_types=1);
                 <th>From</th>
                 <th>Subject</th>
                 <th>Date</th>
+                <th>Organization</th>
               </tr>
             </thead>
             <tbody>
@@ -158,16 +159,20 @@ declare(strict_types=1);
                     }
                  ?>
                 <?php
-                  // Get company info for this email by checking domain
+                  // Get company and people info for this email
                   $companyLabel = '';
+                  $peopleLabels = '';
                   $fromEmail = (string)$em['from'];
                   $domain = '';
+                  $fromName = '';
                   
-                  // Extract email address
+                  // Extract email address and name
                   if (preg_match('/<([^>]+)>/', $fromEmail, $mFrom)) {
                     $fromEmail = strtolower(trim($mFrom[1]));
+                    $fromName = trim(preg_replace('/<[^>]+>/', '', $fromEmail));
                   } else {
                     $fromEmail = strtolower(trim($fromEmail));
+                    $fromName = $fromEmail;
                   }
                   
                   // Extract domain from email
@@ -182,7 +187,21 @@ declare(strict_types=1);
                       $compStmt->execute([':domain' => $domain]);
                       $company = $compStmt->fetch();
                       if ($company) {
-                        $companyLabel = '<span class="badge bg-success ms-1" title="Company: ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+                        $companyLabel = '<span class="badge bg-success" title="Company: ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+                      }
+                    } catch (Throwable $ign) {}
+                  }
+                  
+                  // Check if people exist in database
+                  if ($fromName !== '') {
+                    try {
+                      $peopleStmt = $db->prepare('SELECT name FROM people WHERE name LIKE :name');
+                      $peopleStmt->execute([':name' => '%' . $fromName . '%']);
+                      $people = $peopleStmt->fetchAll();
+                      if ($people) {
+                        foreach ($people as $person) {
+                          $peopleLabels .= '<span class="badge bg-primary ms-1" title="Person: ' . htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+                        }
                       }
                     } catch (Throwable $ign) {}
                   }
@@ -191,7 +210,6 @@ declare(strict_types=1);
                   <td><?php echo (int)$em['index']; ?></td>
                   <td>
                     <?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?>
-                    <?php echo $companyLabel; ?>
                   </td>
                   <td>
                     <?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?>
@@ -202,10 +220,21 @@ declare(strict_types=1);
                     <?php } ?>
                   </td>
                   <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td>
+                    <?php if ($companyLabel) { ?>
+                      <div style="margin-bottom: 4px;"><?php echo $companyLabel; ?></div>
+                    <?php } ?>
+                    <?php if ($peopleLabels) { ?>
+                      <div><?php echo $peopleLabels; ?></div>
+                    <?php } ?>
+                    <?php if (!$companyLabel && !$peopleLabels) { ?>
+                      <span style="color: #999; font-size: 12px;">No matches</span>
+                    <?php } ?>
+                  </td>
                 </tr>
                 <?php if ($isSelected) { ?>
                   <tr>
-                    <td colspan="4" style="padding: 0; border: none;">
+                    <td colspan="5" style="padding: 0; border: none;">
                       <div class="message-detail mt-2 p-3" style="background-color: #f8f9fa; border-left: 4px solid #0d6efd;">
                         <?php
                           // Fetch email detail for selected row
