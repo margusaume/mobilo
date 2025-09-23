@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 session_start();
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/smtp.php';
+require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/inc/smtp.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: index.html?error=1');
