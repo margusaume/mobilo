@@ -306,13 +306,13 @@ declare(strict_types=1);
                              ?>" />
                       <div id="company_dropdown_<?php echo (int)$person['id']; ?>" 
                            style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-top: none; max-height: 200px; overflow-y: auto; z-index: 1000;">
-                        <div class="company-option" data-id="0" data-name="-- No Company --" onclick="selectCompany(<?php echo (int)$person['id']; ?>, 0, '-- No Company --')" 
+                        <div class="company-option" data-id="0" data-name="-- No Company --" onclick="selectAndSaveCompany(<?php echo (int)$person['id']; ?>, 0, '-- No Company --')" 
                              style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === 0) ? 'background-color: #f0f0f0;' : ''; ?>">
                           -- No Company --
                         </div>
                         <?php foreach ($companies as $company) { ?>
                           <div class="company-option" data-id="<?php echo (int)$company['id']; ?>" data-name="<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>" 
-                               onclick="selectCompany(<?php echo (int)$person['id']; ?>, <?php echo (int)$company['id']; ?>, '<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>')"
+                               onclick="selectAndSaveCompany(<?php echo (int)$person['id']; ?>, <?php echo (int)$company['id']; ?>, '<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>')"
                                style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === (int)$company['id']) ? 'background-color: #f0f0f0;' : ''; ?>">
                             <?php echo htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8'); ?> (<?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>)
                           </div>
@@ -330,10 +330,12 @@ declare(strict_types=1);
                     <input type="hidden" name="action" value="update_person" />
                     <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
                     <input type="hidden" name="name" id="save_name_<?php echo (int)$person['id']; ?>" value="" />
-                    <input type="hidden" name="company_id" id="save_company_<?php echo (int)$person['id']; ?>" value="" />
-                    <button type="submit" onclick="prepareSave(<?php echo (int)$person['id']; ?>)">Save</button>
+                    <button type="submit" onclick="prepareSave(<?php echo (int)$person['id']; ?>)">Save Name</button>
                   </form>
-                  <span style="color: #28a745; font-size: 12px; margin-left: 8px;">✓ Active</span>
+                  <span id="company_status_<?php echo (int)$person['id']; ?>" 
+                        style="font-size: 12px; margin-left: 8px; padding: 2px 6px; border-radius: 3px; <?php echo ((int)$person['company_id'] > 0) ? 'background-color: #d4edda; color: #155724;' : 'background-color: #f8f9fa; color: #6c757d;'; ?>">
+                    <?php echo ((int)$person['company_id'] > 0) ? '✓ Connected' : 'No Company'; ?>
+                  </span>
                 </td>
               </tr>
             <?php } ?>
@@ -489,6 +491,44 @@ function addCompany(id, domain) {
       if (dropdown) {
         dropdown.style.display = 'none';
       }
+    }
+
+    function selectAndSaveCompany(personId, companyId, companyName) {
+      // First update the UI
+      selectCompany(personId, companyId, companyName);
+      
+      // Then save to database
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = 'dashboard.php?tab=crm&sub=people';
+      
+      const actionInput = document.createElement('input');
+      actionInput.type = 'hidden';
+      actionInput.name = 'action';
+      actionInput.value = 'update_person';
+      
+      const idInput = document.createElement('input');
+      idInput.type = 'hidden';
+      idInput.name = 'id';
+      idInput.value = personId;
+      
+      const nameInput = document.createElement('input');
+      nameInput.type = 'hidden';
+      nameInput.name = 'name';
+      nameInput.value = document.querySelector('input[name="name_' + personId + '"]').value;
+      
+      const companyIdInput = document.createElement('input');
+      companyIdInput.type = 'hidden';
+      companyIdInput.name = 'company_id';
+      companyIdInput.value = companyId;
+      
+      form.appendChild(actionInput);
+      form.appendChild(idInput);
+      form.appendChild(nameInput);
+      form.appendChild(companyIdInput);
+      
+      document.body.appendChild(form);
+      form.submit();
     }
 
     function prepareSave(personId) {
