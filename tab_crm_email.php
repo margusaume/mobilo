@@ -336,58 +336,74 @@ declare(strict_types=1);
                   </form>
                 </td>
                 <td style="padding: 12px; border: 1px solid #ddd;">
-                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
-                    <input type="hidden" name="action" value="update_company" />
-                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
-                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="text" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
-                           style="min-width: 150px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
-                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
-                  </form>
+                  <?php if ($hasNewColumns) { ?>
+                    <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                      <input type="hidden" name="action" value="update_company" />
+                      <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                      <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="text" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
+                             style="min-width: 150px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
+                      <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                    </form>
+                  <?php } else { ?>
+                    <span style="color: #999; font-size: 12px;">Update any field to add new columns</span>
+                  <?php } ?>
                 </td>
                 <td style="padding: 12px; border: 1px solid #ddd;">
-                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
-                    <input type="hidden" name="action" value="update_company" />
-                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
-                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <select name="importance" onchange="this.form.submit()" style="min-width: 100px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
-                      <option value="">-- Select --</option>
-                      <option value="High" <?php echo (($company['importance'] ?? '') === 'High') ? 'selected' : ''; ?>>High</option>
-                      <option value="Medium" <?php echo (($company['importance'] ?? '') === 'Medium') ? 'selected' : ''; ?>>Medium</option>
-                      <option value="Low" <?php echo (($company['importance'] ?? '') === 'Low') ? 'selected' : ''; ?>>Low</option>
-                    </select>
-                  </form>
+                  <?php if ($hasNewColumns) { ?>
+                    <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                      <input type="hidden" name="action" value="update_company" />
+                      <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                      <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <select name="importance" onchange="this.form.submit()" style="min-width: 100px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="">-- Select --</option>
+                        <option value="High" <?php echo (($company['importance'] ?? '') === 'High') ? 'selected' : ''; ?>>High</option>
+                        <option value="Medium" <?php echo (($company['importance'] ?? '') === 'Medium') ? 'selected' : ''; ?>>Medium</option>
+                        <option value="Low" <?php echo (($company['importance'] ?? '') === 'Low') ? 'selected' : ''; ?>>Low</option>
+                      </select>
+                    </form>
+                  <?php } else { ?>
+                    <span style="color: #999; font-size: 12px;">Update any field to add new columns</span>
+                  <?php } ?>
                 </td>
                 <td style="padding: 12px; border: 1px solid #ddd;">
-                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
-                    <input type="hidden" name="action" value="update_company" />
-                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
-                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="text" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
-                           style="min-width: 120px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
-                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
-                  </form>
+                  <?php if ($hasNewColumns) { ?>
+                    <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                      <input type="hidden" name="action" value="update_company" />
+                      <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                      <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="address" value="<?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="text" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
+                             style="min-width: 120px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" />
+                      <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                    </form>
+                  <?php } else { ?>
+                    <span style="color: #999; font-size: 12px;">Update any field to add new columns</span>
+                  <?php } ?>
                 </td>
                 <td style="padding: 12px; border: 1px solid #ddd;">
-                  <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
-                    <input type="hidden" name="action" value="update_company" />
-                    <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
-                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
-                    <textarea name="address" style="min-width: 200px; min-height: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"><?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
-                    <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
-                  </form>
+                  <?php if ($hasNewColumns) { ?>
+                    <form action="dashboard.php?tab=crm&sub=organisations" method="post" style="display: flex; gap: 8px; align-items: center;">
+                      <input type="hidden" name="action" value="update_company" />
+                      <input type="hidden" name="id" value="<?php echo (int)$company['id']; ?>" />
+                      <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="full_name" value="<?php echo htmlspecialchars((string)($company['full_name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="importance" value="<?php echo htmlspecialchars((string)($company['importance'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <input type="hidden" name="registry_code" value="<?php echo htmlspecialchars((string)($company['registry_code'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
+                      <textarea name="address" style="min-width: 200px; min-height: 60px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; resize: vertical;"><?php echo htmlspecialchars((string)($company['address'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></textarea>
+                      <button type="submit" style="padding: 6px 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+                    </form>
+                  <?php } else { ?>
+                    <span style="color: #999; font-size: 12px;">Update any field to add new columns</span>
+                  <?php } ?>
                 </td>
                 <td style="padding: 12px; border: 1px solid #ddd;">
                   <?php if ($hasCompanyIdColumn && isset($company['connected_people']) && $company['connected_people'] !== null) { 

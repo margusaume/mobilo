@@ -64,6 +64,11 @@ try {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         domain TEXT UNIQUE NOT NULL,
         name TEXT,
+        full_name TEXT,
+        importance TEXT,
+        registry_code TEXT,
+        address TEXT,
+        logo_path TEXT,
         created_at TEXT NOT NULL
     )');
 
@@ -103,6 +108,24 @@ try {
         echo "Added company_id column to people table<br>";
     } catch (Throwable $e) {
         echo "Company_id column already exists in people table<br>";
+    }
+
+    // Add new columns to companies table if they don't exist
+    $newCompanyColumns = [
+        'full_name' => 'TEXT',
+        'importance' => 'TEXT', 
+        'registry_code' => 'TEXT',
+        'address' => 'TEXT',
+        'logo_path' => 'TEXT'
+    ];
+    
+    foreach ($newCompanyColumns as $colName => $colType) {
+        try {
+            $db->exec("ALTER TABLE companies ADD COLUMN {$colName} {$colType}");
+            echo "Added {$colName} column to companies table<br>";
+        } catch (Throwable $e) {
+            echo "{$colName} column already exists in companies table<br>";
+        }
     }
 
     echo "Seeding data...<br>";
