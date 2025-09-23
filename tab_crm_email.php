@@ -78,7 +78,12 @@ declare(strict_types=1);
           $name = trim((string)($_POST['name'] ?? ''));
           $companyId = (int)($_POST['company_id'] ?? 0);
           
-          if ($id > 0 && $name !== '') {
+          // Debug info
+          echo '<div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">';
+          echo 'Debug: ID=' . $id . ', Name="' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '", CompanyID=' . $companyId;
+          echo '</div>';
+          
+          if ($id > 0) {
             try {
               // First check if company_id column exists
               $checkColumn = $db->query("PRAGMA table_info(people)");
@@ -92,18 +97,30 @@ declare(strict_types=1);
               }
               
               if ($hasCompanyIdColumn) {
-                $st = $db->prepare('UPDATE people SET name = :n, company_id = :c WHERE id = :id');
-                $st->execute([':n'=>$name, ':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
-                if ($companyId > 0) {
-                  echo '<div style="color:green; margin:8px 0">✓ Person updated and connected to company</div>';
+                if ($name !== '') {
+                  // Update both name and company
+                  $st = $db->prepare('UPDATE people SET name = :n, company_id = :c WHERE id = :id');
+                  $st->execute([':n'=>$name, ':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
                 } else {
-                  echo '<div style="color:green; margin:8px 0">✓ Person updated</div>';
+                  // Update only company
+                  $st = $db->prepare('UPDATE people SET company_id = :c WHERE id = :id');
+                  $st->execute([':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
+                }
+                
+                if ($companyId > 0) {
+                  echo '<div style="color:green; margin:8px 0">✓ Company connection saved</div>';
+                } else {
+                  echo '<div style="color:green; margin:8px 0">✓ Company connection removed</div>';
                 }
               } else {
-                // Fallback: update only name if company_id column doesn't exist
-                $st = $db->prepare('UPDATE people SET name = :n WHERE id = :id');
-                $st->execute([':n'=>$name, ':id'=>$id]);
-                echo '<div style="color:orange; margin:8px 0">Person name updated, but company_id column missing. <a href="setup_db.php">Run database setup</a> to add company connections.</div>';
+                if ($name !== '') {
+                  // Fallback: update only name if company_id column doesn't exist
+                  $st = $db->prepare('UPDATE people SET name = :n WHERE id = :id');
+                  $st->execute([':n'=>$name, ':id'=>$id]);
+                  echo '<div style="color:orange; margin:8px 0">Person name updated, but company_id column missing. <a href="setup_db.php">Run database setup</a> to add company connections.</div>';
+                } else {
+                  echo '<div style="color:orange; margin:8px 0">Company connections not available. <a href="setup_db.php">Run database setup</a> to add company connections.</div>';
+                }
               }
             } catch (Throwable $upErr) {
               echo '<div style="color:#c00; margin:8px 0">Error updating person: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
@@ -342,13 +359,36 @@ declare(strict_types=1);
       </div>
     <?php } ?>
   <?php } else if ($sub === 'organisations') { 
-    // Fetch companies from database
+    // Fetch companies from database with connected people
     $companies = [];
     $companyDebugInfo = '';
     try {
-      $compStmt = $db->query('SELECT id, domain, name, created_at FROM companies ORDER BY id DESC');
-      $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-      $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies.';
+      // Check if company_id column exists in people table
+      $checkColumn = $db->query("PRAGMA table_info(people)");
+      $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+      $hasCompanyIdColumn = false;
+      foreach ($columns as $col) {
+        if ($col['name'] === 'company_id') {
+          $hasCompanyIdColumn = true;
+          break;
+        }
+      }
+      
+      if ($hasCompanyIdColumn) {
+        $compStmt = $db->query('SELECT c.id, c.domain, c.name, c.created_at, 
+                                       GROUP_CONCAT(p.name, ", ") as connected_people,
+                                       COUNT(p.id) as people_count
+                                FROM companies c 
+                                LEFT JOIN people p ON c.id = p.company_id 
+                                GROUP BY c.id, c.domain, c.name, c.created_at
+                                ORDER BY c.id DESC');
+        $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies with people connections.';
+      } else {
+        $compStmt = $db->query('SELECT id, domain, name, created_at FROM companies ORDER BY id DESC');
+        $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies. Company connections not available - <a href="setup_db.php">run setup</a>.';
+      }
     } catch (Throwable $e) {
       $companyDebugInfo = 'Database error: ' . $e->getMessage();
     }
@@ -368,6 +408,7 @@ declare(strict_types=1);
               <th>ID</th>
               <th>Domain</th>
               <th>Name</th>
+              <th>Connected People</th>
               <th>Created</th>
               <th>Actions</th>
             </tr>
@@ -382,6 +423,23 @@ declare(strict_types=1);
                   </span>
                 </td>
                 <td><?php echo htmlspecialchars((string)($company['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                <td>
+                  <?php if ($hasCompanyIdColumn && isset($company['connected_people']) && $company['connected_people'] !== null) { 
+                    $peopleCount = (int)($company['people_count'] ?? 0);
+                    $peopleList = (string)$company['connected_people'];
+                  ?>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                      <span style="background-color: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-size: 11px; display: inline-block;">
+                        <?php echo $peopleCount; ?> person<?php echo $peopleCount !== 1 ? 's' : ''; ?>
+                      </span>
+                      <div style="font-size: 12px; color: #495057; max-width: 200px; word-wrap: break-word;">
+                        <?php echo htmlspecialchars($peopleList, ENT_QUOTES, 'UTF-8'); ?>
+                      </div>
+                    </div>
+                  <?php } else { ?>
+                    <span style="color: #999; font-size: 12px;">No connections</span>
+                  <?php } ?>
+                </td>
                 <td><?php echo htmlspecialchars((string)($company['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                 <td>
                   <span style="color: #28a745; font-size: 12px;">✓ Active</span>
