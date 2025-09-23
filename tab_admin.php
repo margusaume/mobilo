@@ -82,5 +82,3 @@ declare(strict_types=1);
       <?php } ?>
   <?php } ?>
 </section>
-
-
