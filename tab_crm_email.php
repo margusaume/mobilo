@@ -258,11 +258,21 @@ declare(strict_types=1);
                     $peopleList = (string)$company['connected_people'];
                   ?>
                     <div style="display: flex; flex-direction: column; gap: 4px;">
-                      <span style="background-color: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-size: 11px; display: inline-block;">
-                        <?php echo $peopleCount; ?> person<?php echo $peopleCount !== 1 ? 's' : ''; ?>
-                      </span>
-                      <div style="font-size: 12px; color: #495057; max-width: 200px; word-wrap: break-word;">
-                        <?php echo htmlspecialchars($peopleList, ENT_QUOTES, 'UTF-8'); ?>
+                      <div style="font-size: 12px; color: #495057; max-width: 250px; word-wrap: break-word; line-height: 1.4;">
+                        <?php 
+                          // Split the comma-separated names and display each on a new line
+                          $names = explode(', ', $peopleList);
+                          foreach ($names as $index => $name) {
+                            $name = trim($name);
+                            if ($name !== '') {
+                              echo '<div style="margin-bottom: 2px;">';
+                              echo '<span style="background-color: #e3f2fd; color: #1565c0; padding: 2px 6px; border-radius: 3px; font-size: 11px; display: inline-block;">';
+                              echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+                              echo '</span>';
+                              echo '</div>';
+                            }
+                          }
+                        ?>
                       </div>
                     </div>
                   <?php } else { ?>
