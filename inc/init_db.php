@@ -13,6 +13,32 @@ try {
         created_at TEXT NOT NULL
     )');
 
+    // Create companies table
+    $db->exec('CREATE TABLE IF NOT EXISTS companies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT UNIQUE NOT NULL,
+        name TEXT,
+        created_at TEXT NOT NULL
+    )');
+
+    // Create email_company_connections table
+    $db->exec('CREATE TABLE IF NOT EXISTS email_company_connections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email_id INTEGER NOT NULL,
+        company_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (email_id) REFERENCES emails (id),
+        FOREIGN KEY (company_id) REFERENCES companies (id),
+        UNIQUE(email_id, company_id)
+    )');
+
+    // Add company column to emails table if it doesn't exist
+    try {
+        $db->exec('ALTER TABLE emails ADD COLUMN company TEXT');
+    } catch (Throwable $e) {
+        // Column might already exist, ignore error
+    }
+
     // Seed a user only if missing
     $stmt = $db->prepare('SELECT COUNT(1) AS c FROM users WHERE username = :u');
     $stmt->execute([':u' => 'demo']);

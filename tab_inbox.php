@@ -157,9 +157,36 @@ declare(strict_types=1);
                         } catch (Throwable $ign) {}
                     }
                  ?>
+                <?php
+                  // Get company info for this email
+                  $companyLabel = '';
+                  $fromEmail = (string)$em['from'];
+                  if (preg_match('/<([^>]+)>/', $fromEmail, $mFrom)) {
+                    $fromEmail = strtolower(trim($mFrom[1]));
+                  } else {
+                    $fromEmail = strtolower(trim($fromEmail));
+                  }
+                  
+                  if ($fromEmail !== '') {
+                    try {
+                      $compStmt = $db->prepare('SELECT c.name FROM companies c 
+                                               JOIN email_company_connections ecc ON c.id = ecc.company_id 
+                                               JOIN emails e ON ecc.email_id = e.id 
+                                               WHERE e.email = :email');
+                      $compStmt->execute([':email' => $fromEmail]);
+                      $company = $compStmt->fetch();
+                      if ($company) {
+                        $companyLabel = '<span class="badge bg-success ms-1" title="Company: ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+                      }
+                    } catch (Throwable $ign) {}
+                  }
+                ?>
                 <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
                   <td><?php echo (int)$em['index']; ?></td>
-                  <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
+                  <td>
+                    <?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?>
+                    <?php echo $companyLabel; ?>
+                  </td>
                   <td>
                     <?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?>
                     <?php if ($attachmentCount > 0) { ?>
