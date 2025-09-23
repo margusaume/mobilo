@@ -667,46 +667,10 @@ try {
         <div class="col-12">
           <div class="card">
             <div class="card-header">
-              <h5 class="card-title mb-0 text-center">Database Overview</h5>
+              <h5 class="card-title mb-0 text-center">Welcome to Dashboard</h5>
             </div>
-            <div class="card-body">
-              <?php if (empty($tables)) { ?>
-                <p class="text-center text-muted">No user tables found.</p>
-              <?php } else { ?>
-                <ul class="list-unstyled">
-                  <?php foreach ($tables as $t) { ?>
-                    <li><strong><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?></strong></li>
-                  <?php } ?>
-                </ul>
-
-                <?php foreach ($tables as $t) { $rows = $tableSamples[$t] ?? []; ?>
-                  <h6 class="mt-4"><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?> (first 10 rows)</h6>
-                  <?php if (empty($rows)) { ?>
-                    <p class="text-muted">No rows.</p>
-                  <?php } else { $cols = array_keys($rows[0]); ?>
-                    <div class="table-responsive">
-                      <table class="table table-striped table-sm">
-                        <thead>
-                          <tr>
-                            <?php foreach ($cols as $c) { ?>
-                              <th><?php echo htmlspecialchars((string)$c, ENT_QUOTES, 'UTF-8'); ?></th>
-                            <?php } ?>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <?php foreach ($rows as $r) { ?>
-                            <tr>
-                              <?php foreach ($cols as $c) { $val = (string)($r[$c] ?? ''); ?>
-                                <td style="white-space:pre-wrap; word-break:break-word"><?php echo htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); ?></td>
-                              <?php } ?>
-                            </tr>
-                          <?php } ?>
-                        </tbody>
-                      </table>
-                    </div>
-                  <?php } ?>
-                <?php } ?>
-              <?php } ?>
+            <div class="card-body text-center">
+              <p class="text-muted">Select a tab above to get started.</p>
             </div>
           </div>
         </div>
