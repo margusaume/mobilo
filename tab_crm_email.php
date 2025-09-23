@@ -255,18 +255,39 @@ declare(strict_types=1);
         }
       }
       
+      // First check if new columns exist in companies table
+      $checkCompanyColumn = $db->query("PRAGMA table_info(companies)");
+      $companyColumns = $checkCompanyColumn ? $checkCompanyColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+      $existingCompanyColumns = array_column($companyColumns, 'name');
+      
+      $hasNewColumns = in_array('full_name', $existingCompanyColumns);
+      
       if ($hasCompanyIdColumn) {
-        $compStmt = $db->query('SELECT c.id, c.domain, c.name, c.full_name, c.importance, c.registry_code, c.address, c.logo_path, c.created_at, 
-                                       GROUP_CONCAT(p.name, ", ") as connected_people,
-                                       COUNT(p.id) as people_count
-                                FROM companies c 
-                                LEFT JOIN people p ON c.id = p.company_id 
-                                GROUP BY c.id, c.domain, c.name, c.full_name, c.importance, c.registry_code, c.address, c.logo_path, c.created_at
-                                ORDER BY c.id DESC');
+        if ($hasNewColumns) {
+          $compStmt = $db->query('SELECT c.id, c.domain, c.name, c.full_name, c.importance, c.registry_code, c.address, c.logo_path, c.created_at, 
+                                         GROUP_CONCAT(p.name, ", ") as connected_people,
+                                         COUNT(p.id) as people_count
+                                  FROM companies c 
+                                  LEFT JOIN people p ON c.id = p.company_id 
+                                  GROUP BY c.id, c.domain, c.name, c.full_name, c.importance, c.registry_code, c.address, c.logo_path, c.created_at
+                                  ORDER BY c.id DESC');
+        } else {
+          $compStmt = $db->query('SELECT c.id, c.domain, c.name, c.created_at, 
+                                         GROUP_CONCAT(p.name, ", ") as connected_people,
+                                         COUNT(p.id) as people_count
+                                  FROM companies c 
+                                  LEFT JOIN people p ON c.id = p.company_id 
+                                  GROUP BY c.id, c.domain, c.name, c.created_at
+                                  ORDER BY c.id DESC');
+        }
         $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies with people connections.';
       } else {
-        $compStmt = $db->query('SELECT id, domain, name, full_name, importance, registry_code, address, logo_path, created_at FROM companies ORDER BY id DESC');
+        if ($hasNewColumns) {
+          $compStmt = $db->query('SELECT id, domain, name, full_name, importance, registry_code, address, logo_path, created_at FROM companies ORDER BY id DESC');
+        } else {
+          $compStmt = $db->query('SELECT id, domain, name, created_at FROM companies ORDER BY id DESC');
+        }
         $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $companyDebugInfo = 'Query executed successfully. Found ' . count($companies) . ' companies. Company connections not available - <a href="setup_db.php">run setup</a>.';
       }
