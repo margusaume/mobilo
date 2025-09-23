@@ -30,6 +30,7 @@ declare(strict_types=1);
     Debug: <?php echo htmlspecialchars($debugInfo, ENT_QUOTES, 'UTF-8'); ?>
   </div>
 
+  <?php
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'crm' && ($_GET['sub'] ?? '') === 'email') {
       $act = (string)($_POST['action'] ?? '');
       if ($act === 'update_email') {
