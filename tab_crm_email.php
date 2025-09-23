@@ -81,6 +81,7 @@ declare(strict_types=1);
           // Debug info
           echo '<div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">';
           echo 'Debug: ID=' . $id . ', Name=' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ', CompanyID=' . $companyId;
+          echo '<br>POST data: ' . htmlspecialchars(print_r($_POST, true), ENT_QUOTES, 'UTF-8');
           echo '</div>';
           
           if ($id > 0 && $name !== '') {
@@ -491,16 +492,30 @@ function addCompany(id, domain) {
     }
 
     function prepareSave(personId) {
+      // Get the name input value
       const nameInput = document.querySelector('input[name="name_' + personId + '"]');
       const companyInput = document.getElementById('selected_company_' + personId);
       const saveNameInput = document.getElementById('save_name_' + personId);
       const saveCompanyInput = document.getElementById('save_company_' + personId);
       
+      console.log('prepareSave called for personId:', personId);
+      console.log('nameInput found:', nameInput);
+      console.log('companyInput found:', companyInput);
+      console.log('saveNameInput found:', saveNameInput);
+      console.log('saveCompanyInput found:', saveCompanyInput);
+      
       if (nameInput && saveNameInput) {
         saveNameInput.value = nameInput.value;
+        console.log('Name value set to:', nameInput.value);
+      } else {
+        console.log('Name input or save name input not found');
       }
+      
       if (companyInput && saveCompanyInput) {
         saveCompanyInput.value = companyInput.value;
+        console.log('Company value set to:', companyInput.value);
+      } else {
+        console.log('Company input or save company input not found');
       }
     }
 </script>
