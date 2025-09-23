@@ -46,7 +46,7 @@ declare(strict_types=1);
           <h5 class="mt-4">UI behavior</h5>
           <div class="p-3 border rounded bg-light"><?php echo $renderMd($uiBehaviorPath); ?></div>
         <?php } else if ($sub === 'database') { ?>
-          <h5>Database Overview</h5>
+          <h5>Database Tables</h5>
           <?php
             $tables = [];
             $tableSamples = [];
@@ -63,38 +63,49 @@ declare(strict_types=1);
           <?php if (empty($tables)) { ?>
             <p class="text-muted">No user tables found.</p>
           <?php } else { ?>
-            <ul class="list-unstyled">
-              <?php foreach ($tables as $t) { ?>
-                <li><strong><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?></strong></li>
+            <!-- Table Navigation -->
+            <ul class="nav nav-tabs mb-3" id="tableTabs" role="tablist">
+              <?php foreach ($tables as $index => $t) { ?>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link <?php echo $index === 0 ? 'active' : ''; ?>" id="<?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>-tab" data-bs-toggle="tab" data-bs-target="#<?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>" type="button" role="tab" aria-controls="<?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>" aria-selected="<?php echo $index === 0 ? 'true' : 'false'; ?>">
+                    <?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>
+                  </button>
+                </li>
               <?php } ?>
             </ul>
-            <?php foreach ($tables as $t) { $rows = $tableSamples[$t] ?? []; ?>
-              <h6 class="mt-4"><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?> (first 10 rows)</h6>
-              <?php if (empty($rows)) { ?>
-                <p class="text-muted">No rows.</p>
-              <?php } else { $cols = array_keys($rows[0]); ?>
-                <div class="table-responsive">
-                  <table class="table table-striped table-sm">
-                    <thead>
-                      <tr>
-                        <?php foreach ($cols as $c) { ?>
-                          <th><?php echo htmlspecialchars((string)$c, ENT_QUOTES, 'UTF-8'); ?></th>
-                        <?php } ?>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <?php foreach ($rows as $r) { ?>
-                        <tr>
-                          <?php foreach ($cols as $c) { $val = (string)($r[$c] ?? ''); ?>
-                            <td style="white-space:pre-wrap; word-break:break-word"><?php echo htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); ?></td>
+            
+            <!-- Table Content -->
+            <div class="tab-content" id="tableTabsContent">
+              <?php foreach ($tables as $index => $t) { $rows = $tableSamples[$t] ?? []; ?>
+                <div class="tab-pane fade <?php echo $index === 0 ? 'show active' : ''; ?>" id="<?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>" role="tabpanel" aria-labelledby="<?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?>-tab">
+                  <h6><?php echo htmlspecialchars($t, ENT_QUOTES, 'UTF-8'); ?> (first 10 rows)</h6>
+                  <?php if (empty($rows)) { ?>
+                    <p class="text-muted">No rows.</p>
+                  <?php } else { $cols = array_keys($rows[0]); ?>
+                    <div class="table-responsive">
+                      <table class="table table-striped table-sm">
+                        <thead>
+                          <tr>
+                            <?php foreach ($cols as $c) { ?>
+                              <th><?php echo htmlspecialchars((string)$c, ENT_QUOTES, 'UTF-8'); ?></th>
+                            <?php } ?>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <?php foreach ($rows as $r) { ?>
+                            <tr>
+                              <?php foreach ($cols as $c) { $val = (string)($r[$c] ?? ''); ?>
+                                <td style="white-space:pre-wrap; word-break:break-word"><?php echo htmlspecialchars($val, ENT_QUOTES, 'UTF-8'); ?></td>
+                              <?php } ?>
+                            </tr>
                           <?php } ?>
-                        </tr>
-                      <?php } ?>
-                    </tbody>
-                  </table>
+                        </tbody>
+                      </table>
+                    </div>
+                  <?php } ?>
                 </div>
               <?php } ?>
-            <?php } ?>
+            </div>
           <?php } ?>
         <?php } else if ($sub === 'channels') { ?>
           <h5>Channels</h5>
