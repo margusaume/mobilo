@@ -73,6 +73,19 @@ declare(strict_types=1);
               echo '<div style="color:#c00; margin:8px 0">Error adding person: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
             }
           }
+        } else if ($act === 'update_person') {
+          $id = (int)($_POST['id'] ?? 0);
+          $name = trim((string)($_POST['name'] ?? ''));
+          $companyId = (int)($_POST['company_id'] ?? 0);
+          if ($id > 0 && $name !== '') {
+            try {
+              $st = $db->prepare('UPDATE people SET name = :n, company_id = :c WHERE id = :id');
+              $st->execute([':n'=>$name, ':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
+              echo '<div style="color:green; margin:8px 0">Person updated</div>';
+            } catch (Throwable $upErr) {
+              echo '<div style="color:#c00; margin:8px 0">Error updating person: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+          }
         }
       }
       
@@ -185,15 +198,27 @@ declare(strict_types=1);
   <?php } ?>
   
   <?php } else if ($sub === 'people') { 
-    // Fetch people from database
+    // Fetch people from database with company info
     $people = [];
     $peopleDebugInfo = '';
     try {
-      $peopleStmt = $db->query('SELECT id, name, created_at FROM people ORDER BY id DESC');
+      $peopleStmt = $db->query('SELECT p.id, p.name, p.company_id, p.created_at, c.name as company_name, c.domain as company_domain 
+                                FROM people p 
+                                LEFT JOIN companies c ON p.company_id = c.id 
+                                ORDER BY p.id DESC');
       $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
       $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people.';
     } catch (Throwable $e) {
       $peopleDebugInfo = 'Database error: ' . $e->getMessage();
+    }
+    
+    // Fetch companies for dropdown
+    $companies = [];
+    try {
+      $compStmt = $db->query('SELECT id, name, domain FROM companies ORDER BY name');
+      $companies = $compStmt ? $compStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+      // Ignore errors
     }
   ?>
     <h3>People</h3>
@@ -210,6 +235,7 @@ declare(strict_types=1);
             <tr>
               <th>ID</th>
               <th>Name</th>
+              <th>Company</th>
               <th>Created</th>
               <th>Actions</th>
             </tr>
@@ -218,7 +244,30 @@ declare(strict_types=1);
             <?php foreach ($people as $person) { ?>
               <tr>
                 <td><?php echo (int)$person['id']; ?></td>
-                <td><?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?></td>
+                <td>
+                  <form action="dashboard.php?tab=crm&sub=people" method="post" style="display:flex; gap:6px; align-items:center">
+                    <input type="hidden" name="action" value="update_person" />
+                    <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
+                    <input type="text" name="name" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" style="min-width:200px" required />
+                    <button type="submit">Save</button>
+                  </form>
+                </td>
+                <td>
+                  <form action="dashboard.php?tab=crm&sub=people" method="post" style="display:flex; gap:6px; align-items:center">
+                    <input type="hidden" name="action" value="update_person" />
+                    <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
+                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" />
+                    <select name="company_id" onchange="this.form.submit()" style="min-width:200px">
+                      <option value="0">-- No Company --</option>
+                      <?php foreach ($companies as $company) { ?>
+                        <option value="<?php echo (int)$company['id']; ?>" 
+                                <?php echo ((int)$person['company_id'] === (int)$company['id']) ? 'selected' : ''; ?>>
+                          <?php echo htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8'); ?> (<?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>)
+                        </option>
+                      <?php } ?>
+                    </select>
+                  </form>
+                </td>
                 <td><?php echo htmlspecialchars((string)($person['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                 <td>
                   <span style="color: #28a745; font-size: 12px;">✓ Active</span>

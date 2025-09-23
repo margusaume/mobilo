@@ -82,7 +82,9 @@ try {
     $db->exec('CREATE TABLE IF NOT EXISTS people (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
-        created_at TEXT NOT NULL
+        company_id INTEGER,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (company_id) REFERENCES companies (id)
     )');
 
     echo "Adding missing columns...<br>";
@@ -93,6 +95,14 @@ try {
         echo "Added company column to emails table<br>";
     } catch (Throwable $e) {
         echo "Company column already exists in emails table<br>";
+    }
+
+    // Add company_id column to people table if it doesn't exist
+    try {
+        $db->exec('ALTER TABLE people ADD COLUMN company_id INTEGER');
+        echo "Added company_id column to people table<br>";
+    } catch (Throwable $e) {
+        echo "Company_id column already exists in people table<br>";
     }
 
     echo "Seeding data...<br>";
