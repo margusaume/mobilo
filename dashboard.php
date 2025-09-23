@@ -269,7 +269,6 @@ try {
     <p><a href="logout.php">Log out</a></p>
 
     <nav class="nav">
-      <a href="dashboard.php?tab=channels" class="<?php echo $activeTab==='channels'?'active':''; ?>">Channels</a>
       <a href="dashboard.php?tab=inbox" class="<?php echo $activeTab==='inbox'?'active':''; ?>">INBOX</a>
       <a href="dashboard.php?tab=crm" class="<?php echo $activeTab==='crm'?'active':''; ?>">CRM:email</a>
       <a href="dashboard.php?tab=admin" class="<?php echo $activeTab==='admin'?'active':''; ?>">ADMIN</a>
