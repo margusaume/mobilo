@@ -13,7 +13,7 @@ $username = htmlspecialchars((string)($_SESSION['username'] ?? 'user'), ENT_QUOT
 $activeTab = 'users';
 if (isset($_GET['tab'])) {
     $tab = $_GET['tab'];
-    if ($tab === 'channels' || $tab === 'inbox' || $tab === 'emails' || $tab === 'users') {
+    if ($tab === 'channels' || $tab === 'inbox' || $tab === 'emails' || $tab === 'site' || $tab === 'users') {
         $activeTab = $tab;
     }
 }
@@ -62,6 +62,18 @@ try {
 		created_at TEXT NOT NULL,
 		FOREIGN KEY(email_id) REFERENCES emails(id)
 	)');
+
+    // Messages table for INBOX
+    $db->exec('CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        message_id TEXT UNIQUE NOT NULL,
+        from_name TEXT,
+        from_email TEXT,
+        subject TEXT,
+        mail_date TEXT,
+        snippet TEXT,
+        created_at TEXT NOT NULL
+    )');
 	// Seed statuses if empty
 	$cntRow = $db->query('SELECT COUNT(1) AS c FROM email_statuses')->fetch();
 	if ((int)($cntRow['c'] ?? 0) === 0) {
@@ -233,6 +245,7 @@ try {
       <a href="dashboard.php?tab=channels" class="<?php echo $activeTab==='channels'?'active':''; ?>">Channels</a>
       <a href="dashboard.php?tab=inbox" class="<?php echo $activeTab==='inbox'?'active':''; ?>">INBOX</a>
       <a href="dashboard.php?tab=emails" class="<?php echo $activeTab==='emails'?'active':''; ?>">Emails</a>
+      <a href="dashboard.php?tab=site" class="<?php echo $activeTab==='site'?'active':''; ?>">Site</a>
     </nav>
 
     <?php if ($activeTab === 'channels') { ?>
@@ -345,16 +358,22 @@ try {
                             'subject' => $subj,
                             'date' => $dateStr,
                         ];
-                        // Auto-save
+                        // Upsert into messages and ensure contacts (emails)
                         try {
-                            $check = $db->prepare('SELECT id FROM emails WHERE message_id = :m');
-                            $check->execute([':m'=>$msgId]);
-                            $row = $check->fetch();
-                            if (!$row) {
-                                $snippet = '';
-                                $newId = null; foreach ($emailStatuses as $sid=>$s) { if ($s['key']==='new') { $newId = $sid; break; } }
-                                $db->prepare('INSERT INTO emails (message_id, from_addr, subject, mail_date, snippet, status_id, created_at) VALUES (:m,:f,:s,:d,:n,:st,:t)')
-                                   ->execute([':m'=>$msgId, ':f'=>$from, ':s'=>$subj, ':d'=>$dateStr, ':n'=>$snippet, ':st'=>$newId, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                            // parse from into name/email
+                            $fromName = null; $fromEmail = $from;
+                            if (preg_match('/<([^>]+)>/', $from, $mFrom)) {
+                                $fromEmail = strtolower(trim($mFrom[1]));
+                                $n = trim(str_replace($mFrom[0], '', $from));
+                                $n = trim($n, " \"'\t");
+                                if ($n !== '') { $fromName = $n; }
+                            }
+                            $snippet = '';
+                            $insMsg = $db->prepare('INSERT OR IGNORE INTO messages (message_id, from_name, from_email, subject, mail_date, snippet, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:t)');
+                            $insMsg->execute([':m'=>$msgId, ':fn'=>$fromName, ':fe'=>$fromEmail, ':s'=>$subj, ':d'=>$dateStr, ':n'=>$snippet, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                            if ($fromEmail !== '') {
+                                $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
+                                   ->execute([':e'=>$fromEmail, ':n'=>$fromName, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
                             }
                         } catch (Throwable $ign) {}
                     }
@@ -372,47 +391,20 @@ try {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>From (parsed)</th>
+                  <th>Message-ID</th>
+                  <th>From</th>
+                  <th>Subject</th>
                   <th>Date</th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 <?php foreach ($emails as $em) { ?>
                   <tr>
                     <td><?php echo (int)$em['index']; ?></td>
-                    <td>
-                      <?php
-                        $from = (string)($em['from'] ?? '');
-                        $nameP = ''; $emailP = $from;
-                        if (preg_match('/<([^>]+)>/', $from, $m)) {
-                            $emailP = trim($m[1]);
-                            $n = trim(str_replace($m[0], '', $from));
-                            $n = trim($n, " \"'\t");
-                            $nameP = $n;
-                        }
-                        echo htmlspecialchars($nameP !== '' ? ($nameP . ' <' . $emailP . '>') : $emailP, ENT_QUOTES, 'UTF-8');
-                      ?>
-                    </td>
+                    <td style="font-family:monospace; font-size:12px"><?php echo htmlspecialchars((string)($em['message_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
                     <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td>
-                      <?php
-                        // Upsert into new emails table by parsed email
-                        $localId = null; $currentStatusId = 0;
-                        try {
-                            $emailOnly = $emailP = strtolower($emailP);
-                            if ($emailOnly !== '') {
-                                $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
-                                   ->execute([':e'=>$emailOnly, ':n'=>$nameP !== '' ? $nameP : null, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                                $stL = $db->prepare('SELECT id FROM emails WHERE email = :e');
-                                $stL->execute([':e'=>$emailOnly]);
-                                $loc = $stL->fetch();
-                                if ($loc) { $localId = (int)$loc['id']; }
-                            }
-                        } catch (Throwable $ignored) {}
-                      ?>
-                      <?php if ($localId) { echo '<span style="color:green">Saved</span>'; } else { echo '<em style="color:#666">Parsing...</em>'; } ?>
-                    </td>
                   </tr>
                 <?php } ?>
               </tbody>
@@ -490,6 +482,31 @@ try {
             </table>
           </div>
         <?php } ?>
+      </section>
+    <?php } else if ($activeTab === 'site') { ?>
+      <section style="text-align:left; max-width:980px">
+        <h2>Site specification</h2>
+        <?php
+          $dataModelPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'data-model.md';
+          $uiBehaviorPath = __DIR__ . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'ui-behavior.md';
+          $renderMd = function(string $path): string {
+              if (!is_file($path)) { return '<p style="color:#666">Missing: ' . htmlspecialchars(basename($path), ENT_QUOTES, 'UTF-8') . '</p>'; }
+              $txt = (string)@file_get_contents($path);
+              // minimal Markdown-ish rendering: escape then convert basic headings and line breaks
+              $safe = htmlspecialchars($txt, ENT_QUOTES, 'UTF-8');
+              $safe = preg_replace('/^## (.*)$/m', '<h3>$1</h3>', $safe);
+              $safe = preg_replace('/^### (.*)$/m', '<h4>$1</h4>', $safe);
+              $safe = preg_replace('/^- (.*)$/m', '<li>$1</li>', $safe);
+              $safe = preg_replace('/\n{2,}/', "\n\n", $safe);
+              // wrap consecutive <li> into <ul>
+              $safe = preg_replace('/(?:<li>.*<\/li>\n?)+/s', '<ul>$0</ul>', (string)$safe);
+              return nl2br($safe);
+          };
+        ?>
+        <h3>Data model</h3>
+        <div style="padding:12px; border:1px solid #eee; border-radius:6px; background:#fafafa"><?php echo $renderMd($dataModelPath); ?></div>
+        <h3 style="margin-top:20px">UI behavior</h3>
+        <div style="padding:12px; border:1px solid #eee; border-radius:6px; background:#fafafa"><?php echo $renderMd($uiBehaviorPath); ?></div>
       </section>
     <?php } else { ?>
       <section style="text-align:left; max-width:920px">
