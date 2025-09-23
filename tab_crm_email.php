@@ -60,22 +60,35 @@ declare(strict_types=1);
           <tr>
             <th>ID</th>
             <th>Email</th>
+            <th>Domain</th>
             <th>Name</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          <?php foreach ($rows as $em) { ?>
+          <?php foreach ($rows as $em) { 
+            // Extract domain from email
+            $domain = '';
+            $email = (string)$em['email'];
+            if (strpos($email, '@') !== false) {
+              $domain = strtolower(trim(substr($email, strpos($email, '@') + 1)));
+            }
+          ?>
             <tr>
               <td><?php echo (int)$em['id']; ?></td>
               <td>
                 <form action="dashboard.php?tab=crm&sub=email" method="post" style="display:flex; gap:6px; align-items:center">
                   <input type="hidden" name="action" value="update_email" />
                   <input type="hidden" name="id" value="<?php echo (int)$em['id']; ?>" />
-                  <input type="text" name="email" value="<?php echo htmlspecialchars((string)$em['email'], ENT_QUOTES, 'UTF-8'); ?>" style="min-width:260px" required />
+                  <input type="text" name="email" value="<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>" style="min-width:260px" required />
                   <input type="text" name="name" value="<?php echo htmlspecialchars((string)($em['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="min-width:200px" />
                   <button type="submit">Save</button>
                 </form>
+              </td>
+              <td>
+                <span style="background-color: #e9ecef; color: #495057; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;">
+                  <?php echo htmlspecialchars($domain, ENT_QUOTES, 'UTF-8'); ?>
+                </span>
               </td>
               <td><?php echo htmlspecialchars((string)($em['name'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
               <td></td>
