@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 session_start();
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/smtp.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: index.html?error=1');
@@ -186,14 +187,41 @@ try {
 		}
 		if ($action === 'reply') {
 			$emailId = (int)($_POST['email_id'] ?? 0);
+			$subject = trim((string)($_POST['subject'] ?? ''));
 			$body = trim((string)($_POST['body'] ?? ''));
-			if ($emailId > 0 && $body !== '') {
-				$db->prepare('INSERT INTO email_responses (email_id, body, sent_via, created_at) VALUES (:e,:b,:v,:t)')
-					->execute([':e'=>$emailId, ':b'=>$body, ':v'=>'logged-only', ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-				// set status to replied
-				$repliedId = null; foreach ($emailStatuses as $sid=>$s) { if ($s['key']==='replied') { $repliedId = $sid; break; } }
-				if ($repliedId) { $db->prepare('UPDATE emails SET status_id=:s WHERE id=:id')->execute([':s'=>$repliedId, ':id'=>$emailId]); }
-				$flashMessage = 'Response saved';
+			if ($emailId > 0 && $body !== '' && $subject !== '') {
+				// find recipient address
+				$toRow = null; $toEmail=''; $toName='';
+				$stTo = $db->prepare('SELECT email, name FROM emails WHERE id = :id');
+				$stTo->execute([':id'=>$emailId]);
+				$toRow = $stTo->fetch(PDO::FETCH_ASSOC);
+				if ($toRow) { $toEmail = (string)$toRow['email']; $toName = (string)($toRow['name'] ?? ''); }
+
+				$cfg = [];
+				$cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
+				if (is_file($cfgFile)) { $cfg = require $cfgFile; }
+				$smtpCfg = $cfg['smtp'] ?? [];
+				$hostS = (string)($smtpCfg['host'] ?? '');
+				$portS = (int)($smtpCfg['port'] ?? 465);
+				$encS = strtolower((string)($smtpCfg['encryption'] ?? 'ssl'));
+				$userS = (string)($smtpCfg['username'] ?? '');
+				$passS = (string)($smtpCfg['password'] ?? '');
+				$fromEmail = $userS; $fromName = '';
+
+				if ($hostS && $userS && $passS && $toEmail) {
+					[$ok, $msg] = sendSmtpEmail($hostS, $portS, $encS, $userS, $passS, $fromEmail, $fromName, $toEmail, $toName, $subject, $body, null);
+					if ($ok) {
+						$db->prepare('INSERT INTO email_responses (email_id, body, sent_via, created_at) VALUES (:e,:b,:v,:t)')
+							->execute([':e'=>$emailId, ':b'=>$body, ':v'=>'smtp', ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+						$repliedId = null; foreach ($emailStatuses as $sid=>$s) { if ($s['key']==='replied') { $repliedId = $sid; break; } }
+						if ($repliedId) { $db->prepare('UPDATE emails SET status_id=:s WHERE id=:id')->execute([':s'=>$repliedId, ':id'=>$emailId]); }
+						$flashMessage = 'Email sent';
+					} else {
+						$flashError = 'SMTP error: ' . $msg;
+					}
+				} else {
+					$flashError = 'SMTP not configured or recipient missing.';
+				}
 			}
 		}
 	}
@@ -391,25 +419,171 @@ try {
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Message-ID</th>
                   <th>From</th>
                   <th>Subject</th>
                   <th>Date</th>
                 </tr>
               </thead>
               <tbody>
-                <?php foreach ($emails as $em) { ?>
+                <?php foreach ($emails as $em) { $viewUrl = 'dashboard.php?tab=inbox&view=' . urlencode((string)($em['message_id'] ?? '')); ?>
                   <tr>
-                    <td><?php echo (int)$em['index']; ?></td>
-                    <td style="font-family:monospace; font-size:12px"><?php echo htmlspecialchars((string)($em['message_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo (int)$em['index']; ?></a></td>
+                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></a></td>
+                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?></a></td>
+                    <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></a></td>
                   </tr>
                 <?php } ?>
               </tbody>
             </table>
           </div>
+          <?php
+            // Detail panel for a selected message
+            $viewMid = isset($_GET['view']) ? (string)$_GET['view'] : '';
+            if ($viewMid !== '') {
+                $detail = null; $attachments = [];
+                // reopen IMAP and fetch by Message-ID header
+                if ($host && $usernameCfg && $passwordCfg) {
+                    $flags = '/imap';
+                    if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
+                    if ($encryption === 'starttls') { $flags .= '/tls'; }
+                    if (!$validateCert) { $flags .= '/novalidate-cert'; }
+                    $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
+                    $inbox2 = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, ['DISABLE_AUTHENTICATOR' => 'gssapi']);
+                    if ($inbox2) {
+                        $ids = @imap_search($inbox2, 'HEADER Message-ID "' . addcslashes($viewMid, '"') . '"');
+                        if ($ids === false) { $ids = []; }
+                        // fallback: linear scan in recent window
+                        if (empty($ids)) {
+                            $num2 = imap_num_msg($inbox2);
+                            $start2 = max(1, $num2 - $limit + 1);
+                            for ($i2 = $num2; $i2 >= $start2; $i2--) {
+                                $ov = imap_headerinfo($inbox2, $i2);
+                                $mid = isset($ov->message_id) ? (string)$ov->message_id : '';
+                                if ($mid === '') {
+                                    $fallback = ((string)($ov->fromaddress ?? '')) . '|' . ((string)($ov->subject ?? '')) . '|' . ((string)($ov->date ?? ''));
+                                    $mid = 'fallback:' . sha1($fallback);
+                                }
+                                if ($mid === $viewMid) { $ids = [$i2]; break; }
+                            }
+                        }
+                        if (!empty($ids)) {
+                            $msgNo = (int)$ids[0];
+                            $hdr = imap_headerinfo($inbox2, $msgNo);
+                            $struct = @imap_fetchstructure($inbox2, $msgNo);
+                            // helper to get body
+                            $get_part = function($mbox, $msgno, $p, $partno) use (&$attachments) {
+                                $data = '';
+                                if ($p->type == TYPETEXT && ($p->subtype == 'PLAIN' || $p->subtype == 'HTML')) {
+                                    $data = @imap_fetchbody($mbox, $msgno, $partno);
+                                    if ($p->encoding == ENCBASE64) $data = base64_decode($data);
+                                    elseif ($p->encoding == ENCQUOTEDPRINTABLE) $data = quoted_printable_decode($data);
+                                }
+                                // attachments
+                                $isAttachment = false; $filename = '';
+                                if (!empty($p->dparameters)) {
+                                    foreach ($p->dparameters as $dp) {
+                                        if (strtolower($dp->attribute) == 'filename') { $isAttachment = true; $filename = (string)$dp->value; }
+                                    }
+                                }
+                                if (!empty($p->parameters)) {
+                                    foreach ($p->parameters as $pp) {
+                                        if (strtolower($pp->attribute) == 'name') { $isAttachment = true; if ($filename==='') $filename = (string)$pp->value; }
+                                    }
+                                }
+                                if ($isAttachment) {
+                                    $attachments[] = [ 'part' => $partno, 'filename' => $filename ];
+                                }
+                                return $data;
+                            };
+                            $plain = ''; $html = '';
+                            if ($struct && !empty($struct->parts)) {
+                                $pno = 1;
+                                foreach ($struct->parts as $ix => $p) {
+                                    $partno = (string)($ix+1);
+                                    $content = $get_part($inbox2, $msgNo, $p, $partno);
+                                    if ($p->type == TYPETEXT && $p->subtype == 'PLAIN' && $content !== '') { $plain .= $content; }
+                                    if ($p->type == TYPETEXT && $p->subtype == 'HTML' && $content !== '') { $html .= $content; }
+                                }
+                            } else {
+                                $raw = @imap_body($inbox2, $msgNo);
+                                $plain = quoted_printable_decode($raw);
+                            }
+                            $detail = [
+                                'from' => isset($hdr->fromaddress) ? (string)$hdr->fromaddress : '',
+                                'subject' => isset($hdr->subject) ? (string)imap_utf8($hdr->subject) : '',
+                                'date' => isset($hdr->date) ? (string)$hdr->date : '',
+                                'plain' => $plain,
+                                'html' => $html,
+                                'attachments' => $attachments,
+                            ];
+                        }
+                        @imap_close($inbox2);
+                    }
+                }
+          ?>
+          <?php if (!empty($detail)) { ?>
+            <div style="margin-top:16px; padding:12px; border:1px solid #ddd; border-radius:6px">
+              <h3 style="margin-top:0">Message</h3>
+              <div><strong>From:</strong> <?php echo htmlspecialchars($detail['from'], ENT_QUOTES, 'UTF-8'); ?></div>
+              <div><strong>Subject:</strong> <?php echo htmlspecialchars($detail['subject'], ENT_QUOTES, 'UTF-8'); ?></div>
+              <div><strong>Date:</strong> <?php echo htmlspecialchars($detail['date'], ENT_QUOTES, 'UTF-8'); ?></div>
+              <div style="margin-top:12px">
+                <strong>Content:</strong>
+                <div style="border:1px solid #eee; border-radius:6px; padding:10px; background:#fafafa; max-height:420px; overflow:auto">
+                  <?php
+                    if ($detail['html'] !== '') {
+                        // show HTML as escaped preview
+                        echo nl2br(htmlspecialchars($detail['html'], ENT_QUOTES, 'UTF-8'));
+                    } else {
+                        echo nl2br(htmlspecialchars($detail['plain'], ENT_QUOTES, 'UTF-8'));
+                    }
+                  ?>
+                </div>
+              </div>
+              <div style="margin-top:12px">
+                <strong>Attachments:</strong>
+                <?php if (empty($detail['attachments'])) { echo '<span style="color:#666"> none</span>'; } else { ?>
+                  <ul>
+                    <?php foreach ($detail['attachments'] as $att) { ?>
+                      <li><?php echo htmlspecialchars((string)$att['filename'], ENT_QUOTES, 'UTF-8'); ?></li>
+                    <?php } ?>
+                  </ul>
+                <?php } ?>
+              </div>
+              <div style="margin-top:12px">
+                <details>
+                  <summary>Reply</summary>
+                  <?php
+                    // Find/create contact id by from email
+                    $fromAddr = (string)$detail['from'];
+                    $fromEmailOnly = $fromAddr;
+                    if (preg_match('/<([^>]+)>/', $fromAddr, $mfe)) { $fromEmailOnly = strtolower(trim($mfe[1])); }
+                    $contactId = null;
+                    if ($fromEmailOnly !== '') {
+                        try {
+                            $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
+                               ->execute([':e'=>$fromEmailOnly, ':n'=>null, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                            $stC = $db->prepare('SELECT id FROM emails WHERE email = :e');
+                            $stC->execute([':e'=>$fromEmailOnly]);
+                            $rC = $stC->fetch();
+                            if ($rC) { $contactId = (int)$rC['id']; }
+                        } catch (Throwable $ign) {}
+                    }
+                  ?>
+                  <?php if ($contactId) { ?>
+                    <form action="dashboard.php?tab=inbox&view=<?php echo urlencode($viewMid); ?>" method="post" style="margin-top:8px">
+                      <input type="hidden" name="action" value="reply" />
+                      <input type="hidden" name="email_id" value="<?php echo (int)$contactId; ?>" />
+                      <input type="text" name="subject" placeholder="Subject" style="width:100%; margin-bottom:6px" required />
+                      <textarea name="body" rows="6" style="width:100%" placeholder="Your reply..." required></textarea>
+                      <div style="margin-top:6px"><button type="submit">Send & Save</button></div>
+                    </form>
+                  <?php } else { echo '<p style="color:#666">No contact email found to reply.</p>'; } ?>
+                </details>
+              </div>
+            </div>
+          <?php } ?>
+          <?php } // end detail panel ?>
         <?php } else if ($imapSupported && !$imapError) { ?>
           <p style="color:#666">No emails found.</p>
         <?php } ?>
