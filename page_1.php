@@ -1,9 +1,11 @@
-<!doctype html>
+<?php
+// Minimal PHP page for the "helloworld" link
+?><!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Hello, World!</title>
+  <title>Page 1</title>
   <style>
     html, body { height: 100%; margin: 0; }
     body { display: grid; place-items: center; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, Helvetica, "Apple Color Emoji", "Segoe UI Emoji"; }
@@ -11,17 +13,13 @@
     .container { text-align: center; }
     .sub { color: #666; font-size: 14px; margin-top: 8px; }
   </style>
-  <script>
-    // Basic runtime check to show the page is active
-    console.log("Hello, World! page loaded1");
-  </script>
-  </head>
+</head>
 <body>
   <main class="container">
-    <h1>Hello, World!</h1>
-    <div class="sub">If you can see this in your browser, the setup works.</div>
+    <h1><?php echo "Hello from PHP!"; ?></h1>
+    <div class="sub">This is page_1.php opened from the helloworld link.</div>
     <div style="margin-top:16px">
-      <a href="page_1.php" target="_blank" rel="noopener">helloworld</a>
+      <a href="index.html">Back to index</a>
     </div>
   </main>
 </body>
