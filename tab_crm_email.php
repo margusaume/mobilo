@@ -78,12 +78,6 @@ declare(strict_types=1);
           $name = trim((string)($_POST['name'] ?? ''));
           $companyId = (int)($_POST['company_id'] ?? 0);
           
-          // Debug info
-          echo '<div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">';
-          echo 'Debug: ID=' . $id . ', Name=' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ', CompanyID=' . $companyId;
-          echo '<br>POST data: ' . htmlspecialchars(print_r($_POST, true), ENT_QUOTES, 'UTF-8');
-          echo '</div>';
-          
           if ($id > 0 && $name !== '') {
             try {
               // First check if company_id column exists
@@ -100,7 +94,11 @@ declare(strict_types=1);
               if ($hasCompanyIdColumn) {
                 $st = $db->prepare('UPDATE people SET name = :n, company_id = :c WHERE id = :id');
                 $st->execute([':n'=>$name, ':c'=>($companyId > 0 ? $companyId : null), ':id'=>$id]);
-                echo '<div style="color:green; margin:8px 0">Person updated with company connection</div>';
+                if ($companyId > 0) {
+                  echo '<div style="color:green; margin:8px 0">✓ Person updated and connected to company</div>';
+                } else {
+                  echo '<div style="color:green; margin:8px 0">✓ Person updated</div>';
+                }
               } else {
                 // Fallback: update only name if company_id column doesn't exist
                 $st = $db->prepare('UPDATE people SET name = :n WHERE id = :id');
@@ -497,35 +495,45 @@ function addCompany(id, domain) {
       // First update the UI
       selectCompany(personId, companyId, companyName);
       
-      // Then save to database
+      // Show immediate visual feedback
+      const statusElement = document.getElementById('company_status_' + personId);
+      if (statusElement) {
+        if (companyId > 0) {
+          statusElement.style.backgroundColor = '#d4edda';
+          statusElement.style.color = '#155724';
+          statusElement.textContent = '✓ Connected';
+        } else {
+          statusElement.style.backgroundColor = '#f8f9fa';
+          statusElement.style.color = '#6c757d';
+          statusElement.textContent = 'No Company';
+        }
+      }
+      
+      // Get the current name value
+      const nameInput = document.querySelector('input[name="name_' + personId + '"]');
+      const currentName = nameInput ? nameInput.value : '';
+      
+      // Create and submit form
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = 'dashboard.php?tab=crm&sub=people';
+      form.style.display = 'none';
       
-      const actionInput = document.createElement('input');
-      actionInput.type = 'hidden';
-      actionInput.name = 'action';
-      actionInput.value = 'update_person';
+      // Add form fields
+      const fields = {
+        'action': 'update_person',
+        'id': personId.toString(),
+        'name': currentName,
+        'company_id': companyId.toString()
+      };
       
-      const idInput = document.createElement('input');
-      idInput.type = 'hidden';
-      idInput.name = 'id';
-      idInput.value = personId;
-      
-      const nameInput = document.createElement('input');
-      nameInput.type = 'hidden';
-      nameInput.name = 'name';
-      nameInput.value = document.querySelector('input[name="name_' + personId + '"]').value;
-      
-      const companyIdInput = document.createElement('input');
-      companyIdInput.type = 'hidden';
-      companyIdInput.name = 'company_id';
-      companyIdInput.value = companyId;
-      
-      form.appendChild(actionInput);
-      form.appendChild(idInput);
-      form.appendChild(nameInput);
-      form.appendChild(companyIdInput);
+      for (const [name, value] of Object.entries(fields)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      }
       
       document.body.appendChild(form);
       form.submit();
