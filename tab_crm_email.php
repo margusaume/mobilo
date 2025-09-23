@@ -19,9 +19,24 @@ declare(strict_types=1);
     $rows = [];
     $debugInfo = '';
     try {
-      $emStmt = $db->query('SELECT e.id, e.email, e.name, e.company FROM emails e ORDER BY e.id DESC');
+      // First check if company column exists
+      $checkColumn = $db->query("PRAGMA table_info(emails)");
+      $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+      $hasCompanyColumn = false;
+      foreach ($columns as $col) {
+        if ($col['name'] === 'company') {
+          $hasCompanyColumn = true;
+          break;
+        }
+      }
+      
+      if ($hasCompanyColumn) {
+        $emStmt = $db->query('SELECT e.id, e.email, e.name, e.company FROM emails e ORDER BY e.id DESC');
+      } else {
+        $emStmt = $db->query('SELECT e.id, e.email, e.name, NULL as company FROM emails e ORDER BY e.id DESC');
+      }
       $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-      $debugInfo = 'Query executed successfully. Found ' . count($rows) . ' rows.';
+      $debugInfo = 'Query executed successfully. Found ' . count($rows) . ' rows. Company column: ' . ($hasCompanyColumn ? 'exists' : 'missing');
     } catch (Throwable $e) {
       $debugInfo = 'Database error: ' . $e->getMessage();
     }
@@ -29,6 +44,11 @@ declare(strict_types=1);
   <div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">
     Debug: <?php echo htmlspecialchars($debugInfo, ENT_QUOTES, 'UTF-8'); ?>
   </div>
+  <?php if (strpos($debugInfo, 'Company column: missing') !== false) { ?>
+    <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; margin: 8px 0; border-radius: 4px; color: #856404;">
+      <strong>⚠️ Database Setup Required:</strong> The company column is missing. Please run <a href="setup_db.php" target="_blank" style="color: #856404; text-decoration: underline;">setup_db.php</a> to create the necessary database tables and columns.
+    </div>
+  <?php } ?>
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'crm' && ($_GET['sub'] ?? '') === 'email') {
       $act = (string)($_POST['action'] ?? '');
@@ -71,9 +91,13 @@ declare(strict_types=1);
                 $companyId = (int)$company['id'];
               }
               
-              // Update email with company
-              $updEmail = $db->prepare('UPDATE emails SET company = :c WHERE id = :id');
-              $updEmail->execute([':c' => $domain, ':id' => $id]);
+              // Update email with company (only if column exists)
+              try {
+                $updEmail = $db->prepare('UPDATE emails SET company = :c WHERE id = :id');
+                $updEmail->execute([':c' => $domain, ':id' => $id]);
+              } catch (Throwable $e) {
+                // Company column might not exist yet, ignore this error
+              }
               
               // Create connection
               $connStmt = $db->prepare('INSERT OR IGNORE INTO email_company_connections (email_id, company_id, created_at) VALUES (:e, :c, :t)');
