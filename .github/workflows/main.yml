@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://YOURDOMAIN.EU
+      url: https://MOBILO.SHOP
     steps:
       - name: Checkout to main
         uses: actions/checkout@main
