@@ -245,32 +245,48 @@ declare(strict_types=1);
               <tr>
                 <td><?php echo (int)$person['id']; ?></td>
                 <td>
-                  <form action="dashboard.php?tab=crm&sub=people" method="post" style="display:flex; gap:6px; align-items:center">
-                    <input type="hidden" name="action" value="update_person" />
-                    <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
-                    <input type="text" name="name" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" style="min-width:200px" required />
-                    <button type="submit">Save</button>
-                  </form>
+                  <input type="text" name="name_<?php echo (int)$person['id']; ?>" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" style="min-width:200px" required />
                 </td>
                 <td>
-                  <form action="dashboard.php?tab=crm&sub=people" method="post" style="display:flex; gap:6px; align-items:center">
-                    <input type="hidden" name="action" value="update_person" />
-                    <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
-                    <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" />
-                    <select name="company_id" onchange="this.form.submit()" style="min-width:200px">
-                      <option value="0">-- No Company --</option>
+                  <div style="position: relative; min-width:200px">
+                    <input type="text" id="company_search_<?php echo (int)$person['id']; ?>" 
+                           placeholder="Search companies..." 
+                           style="width: 100%; padding: 4px; border: 1px solid #ccc; border-radius: 4px;"
+                           onkeyup="filterCompanies(<?php echo (int)$person['id']; ?>)"
+                           onfocus="showCompanyDropdown(<?php echo (int)$person['id']; ?>)"
+                           onblur="setTimeout(() => hideCompanyDropdown(<?php echo (int)$person['id']; ?>), 200)"
+                           value="<?php 
+                             if ((int)$person['company_id'] > 0) {
+                               echo htmlspecialchars((string)($person['company_name'] ?? '') . ' (' . (string)($person['company_domain'] ?? '') . ')', ENT_QUOTES, 'UTF-8');
+                             }
+                           ?>" />
+                    <div id="company_dropdown_<?php echo (int)$person['id']; ?>" 
+                         style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ccc; border-top: none; max-height: 200px; overflow-y: auto; z-index: 1000;">
+                      <div class="company-option" data-id="0" data-name="-- No Company --" onclick="selectCompany(<?php echo (int)$person['id']; ?>, 0, '-- No Company --')" 
+                           style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === 0) ? 'background-color: #f0f0f0;' : ''; ?>">
+                        -- No Company --
+                      </div>
                       <?php foreach ($companies as $company) { ?>
-                        <option value="<?php echo (int)$company['id']; ?>" 
-                                <?php echo ((int)$person['company_id'] === (int)$company['id']) ? 'selected' : ''; ?>>
+                        <div class="company-option" data-id="<?php echo (int)$company['id']; ?>" data-name="<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>" 
+                             onclick="selectCompany(<?php echo (int)$person['id']; ?>, <?php echo (int)$company['id']; ?>, '<?php echo htmlspecialchars((string)$company['name'] . ' (' . (string)$company['domain'] . ')', ENT_QUOTES, 'UTF-8'); ?>')"
+                             style="padding: 8px; cursor: pointer; <?php echo ((int)$person['company_id'] === (int)$company['id']) ? 'background-color: #f0f0f0;' : ''; ?>">
                           <?php echo htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8'); ?> (<?php echo htmlspecialchars((string)$company['domain'], ENT_QUOTES, 'UTF-8'); ?>)
-                        </option>
+                        </div>
                       <?php } ?>
-                    </select>
-                  </form>
+                    </div>
+                    <input type="hidden" id="selected_company_<?php echo (int)$person['id']; ?>" value="<?php echo (int)$person['company_id']; ?>" />
+                  </div>
                 </td>
                 <td><?php echo htmlspecialchars((string)($person['created_at'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                 <td>
-                  <span style="color: #28a745; font-size: 12px;">✓ Active</span>
+                  <form action="dashboard.php?tab=crm&sub=people" method="post" style="display:inline">
+                    <input type="hidden" name="action" value="update_person" />
+                    <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
+                    <input type="hidden" name="name" id="save_name_<?php echo (int)$person['id']; ?>" value="" />
+                    <input type="hidden" name="company_id" id="save_company_<?php echo (int)$person['id']; ?>" value="" />
+                    <button type="submit" onclick="prepareSave(<?php echo (int)$person['id']; ?>)">Save</button>
+                  </form>
+                  <span style="color: #28a745; font-size: 12px; margin-left: 8px;">✓ Active</span>
                 </td>
               </tr>
             <?php } ?>
@@ -356,26 +372,89 @@ function addCompany(id, domain) {
   form.submit();
 }
 
-function addPerson(id, name) {
-  // Create a form and submit it
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = 'dashboard.php?tab=crm&sub=email';
-  
-  const actionInput = document.createElement('input');
-  actionInput.type = 'hidden';
-  actionInput.name = 'action';
-  actionInput.value = 'add_person';
-  
-  const nameInput = document.createElement('input');
-  nameInput.type = 'hidden';
-  nameInput.name = 'name';
-  nameInput.value = name;
-  
-  form.appendChild(actionInput);
-  form.appendChild(nameInput);
-  
-  document.body.appendChild(form);
-  form.submit();
-}
+    function addPerson(id, name) {
+      // Create a form and submit it
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = 'dashboard.php?tab=crm&sub=email';
+      
+      const actionInput = document.createElement('input');
+      actionInput.type = 'hidden';
+      actionInput.name = 'action';
+      actionInput.value = 'add_person';
+      
+      const nameInput = document.createElement('input');
+      nameInput.type = 'hidden';
+      nameInput.name = 'name';
+      nameInput.value = name;
+      
+      form.appendChild(actionInput);
+      form.appendChild(nameInput);
+      
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    function showCompanyDropdown(personId) {
+      const dropdown = document.getElementById('company_dropdown_' + personId);
+      if (dropdown) {
+        dropdown.style.display = 'block';
+      }
+    }
+
+    function hideCompanyDropdown(personId) {
+      const dropdown = document.getElementById('company_dropdown_' + personId);
+      if (dropdown) {
+        dropdown.style.display = 'none';
+      }
+    }
+
+    function filterCompanies(personId) {
+      const searchInput = document.getElementById('company_search_' + personId);
+      const dropdown = document.getElementById('company_dropdown_' + personId);
+      const filter = searchInput.value.toLowerCase();
+      
+      if (dropdown) {
+        const options = dropdown.getElementsByClassName('company-option');
+        for (let i = 0; i < options.length; i++) {
+          const text = options[i].textContent.toLowerCase();
+          if (text.includes(filter)) {
+            options[i].style.display = 'block';
+          } else {
+            options[i].style.display = 'none';
+          }
+        }
+        dropdown.style.display = 'block';
+      }
+    }
+
+    function selectCompany(personId, companyId, companyName) {
+      const searchInput = document.getElementById('company_search_' + personId);
+      const hiddenInput = document.getElementById('selected_company_' + personId);
+      const dropdown = document.getElementById('company_dropdown_' + personId);
+      
+      if (searchInput) {
+        searchInput.value = companyName;
+      }
+      if (hiddenInput) {
+        hiddenInput.value = companyId;
+      }
+      if (dropdown) {
+        dropdown.style.display = 'none';
+      }
+    }
+
+    function prepareSave(personId) {
+      const nameInput = document.querySelector('input[name="name_' + personId + '"]');
+      const companyInput = document.getElementById('selected_company_' + personId);
+      const saveNameInput = document.getElementById('save_name_' + personId);
+      const saveCompanyInput = document.getElementById('save_company_' + personId);
+      
+      if (nameInput && saveNameInput) {
+        saveNameInput.value = nameInput.value;
+      }
+      if (companyInput && saveCompanyInput) {
+        saveCompanyInput.value = companyInput.value;
+      }
+    }
 </script>
