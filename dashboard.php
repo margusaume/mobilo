@@ -270,7 +270,7 @@ try {
 
     <nav class="nav">
       <a href="dashboard.php?tab=inbox" class="<?php echo $activeTab==='inbox'?'active':''; ?>">INBOX</a>
-      <a href="dashboard.php?tab=crm" class="<?php echo $activeTab==='crm'?'active':''; ?>">CRM:email</a>
+      <a href="dashboard.php?tab=crm" class="<?php echo $activeTab==='crm'?'active':''; ?>">CRM</a>
       <a href="dashboard.php?tab=admin" class="<?php echo $activeTab==='admin'?'active':''; ?>">ADMIN</a>
     </nav>
 
@@ -423,7 +423,10 @@ try {
                 </tr>
               </thead>
               <tbody>
-                <?php foreach ($emails as $em) { $viewUrl = 'dashboard.php?tab=inbox&view=' . urlencode((string)($em['message_id'] ?? '')); ?>
+                <?php foreach ($emails as $em) {
+                      // use row index for view
+                      $viewUrl = 'dashboard.php?tab=inbox&view_idx=' . urlencode((string)$em['index']);
+                   ?>
                   <tr>
                     <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo (int)$em['index']; ?></a></td>
                     <td><a href="<?php echo $viewUrl; ?>" style="text-decoration:none"><?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?></a></td>
@@ -436,10 +439,10 @@ try {
           </div>
           <?php
             // Detail panel for a selected message
-            $viewMid = isset($_GET['view']) ? (string)$_GET['view'] : '';
-            if ($viewMid !== '') {
+            $viewIdx = isset($_GET['view_idx']) ? (int)$_GET['view_idx'] : 0;
+            if ($viewIdx > 0) {
                 $detail = null; $attachments = [];
-                // reopen IMAP and fetch by Message-ID header
+                // reopen IMAP and fetch by index
                 if ($host && $usernameCfg && $passwordCfg) {
                     $flags = '/imap';
                     if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
@@ -448,73 +451,55 @@ try {
                     $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
                     $inbox2 = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, ['DISABLE_AUTHENTICATOR' => 'gssapi']);
                     if ($inbox2) {
-                        $ids = @imap_search($inbox2, 'HEADER Message-ID "' . addcslashes($viewMid, '"') . '"');
-                        if ($ids === false) { $ids = []; }
-                        // fallback: linear scan in recent window
-                        if (empty($ids)) {
-                            $num2 = imap_num_msg($inbox2);
-                            $start2 = max(1, $num2 - $limit + 1);
-                            for ($i2 = $num2; $i2 >= $start2; $i2--) {
-                                $ov = imap_headerinfo($inbox2, $i2);
-                                $mid = isset($ov->message_id) ? (string)$ov->message_id : '';
-                                if ($mid === '') {
-                                    $fallback = ((string)($ov->fromaddress ?? '')) . '|' . ((string)($ov->subject ?? '')) . '|' . ((string)($ov->date ?? ''));
-                                    $mid = 'fallback:' . sha1($fallback);
-                                }
-                                if ($mid === $viewMid) { $ids = [$i2]; break; }
+                        $msgNo = $viewIdx;
+                        $hdr = imap_headerinfo($inbox2, $msgNo);
+                        $struct = @imap_fetchstructure($inbox2, $msgNo);
+                        // helper to get body
+                        $get_part = function($mbox, $msgno, $p, $partno) use (&$attachments) {
+                            $data = '';
+                            if ($p->type == TYPETEXT && ($p->subtype == 'PLAIN' || $p->subtype == 'HTML')) {
+                                $data = @imap_fetchbody($mbox, $msgno, $partno);
+                                if ($p->encoding == ENCBASE64) $data = base64_decode($data);
+                                elseif ($p->encoding == ENCQUOTEDPRINTABLE) $data = quoted_printable_decode($data);
                             }
-                        }
-                        if (!empty($ids)) {
-                            $msgNo = (int)$ids[0];
-                            $hdr = imap_headerinfo($inbox2, $msgNo);
-                            $struct = @imap_fetchstructure($inbox2, $msgNo);
-                            // helper to get body
-                            $get_part = function($mbox, $msgno, $p, $partno) use (&$attachments) {
-                                $data = '';
-                                if ($p->type == TYPETEXT && ($p->subtype == 'PLAIN' || $p->subtype == 'HTML')) {
-                                    $data = @imap_fetchbody($mbox, $msgno, $partno);
-                                    if ($p->encoding == ENCBASE64) $data = base64_decode($data);
-                                    elseif ($p->encoding == ENCQUOTEDPRINTABLE) $data = quoted_printable_decode($data);
+                            // attachments
+                            $isAttachment = false; $filename = '';
+                            if (!empty($p->dparameters)) {
+                                foreach ($p->dparameters as $dp) {
+                                    if (strtolower($dp->attribute) == 'filename') { $isAttachment = true; $filename = (string)$dp->value; }
                                 }
-                                // attachments
-                                $isAttachment = false; $filename = '';
-                                if (!empty($p->dparameters)) {
-                                    foreach ($p->dparameters as $dp) {
-                                        if (strtolower($dp->attribute) == 'filename') { $isAttachment = true; $filename = (string)$dp->value; }
-                                    }
-                                }
-                                if (!empty($p->parameters)) {
-                                    foreach ($p->parameters as $pp) {
-                                        if (strtolower($pp->attribute) == 'name') { $isAttachment = true; if ($filename==='') $filename = (string)$pp->value; }
-                                    }
-                                }
-                                if ($isAttachment) {
-                                    $attachments[] = [ 'part' => $partno, 'filename' => $filename ];
-                                }
-                                return $data;
-                            };
-                            $plain = ''; $html = '';
-                            if ($struct && !empty($struct->parts)) {
-                                $pno = 1;
-                                foreach ($struct->parts as $ix => $p) {
-                                    $partno = (string)($ix+1);
-                                    $content = $get_part($inbox2, $msgNo, $p, $partno);
-                                    if ($p->type == TYPETEXT && $p->subtype == 'PLAIN' && $content !== '') { $plain .= $content; }
-                                    if ($p->type == TYPETEXT && $p->subtype == 'HTML' && $content !== '') { $html .= $content; }
-                                }
-                            } else {
-                                $raw = @imap_body($inbox2, $msgNo);
-                                $plain = quoted_printable_decode($raw);
                             }
-                            $detail = [
-                                'from' => isset($hdr->fromaddress) ? (string)$hdr->fromaddress : '',
-                                'subject' => isset($hdr->subject) ? (string)imap_utf8($hdr->subject) : '',
-                                'date' => isset($hdr->date) ? (string)$hdr->date : '',
-                                'plain' => $plain,
-                                'html' => $html,
-                                'attachments' => $attachments,
-                            ];
+                            if (!empty($p->parameters)) {
+                                foreach ($p->parameters as $pp) {
+                                    if (strtolower($pp->attribute) == 'name') { $isAttachment = true; if ($filename==='') $filename = (string)$pp->value; }
+                                }
+                            }
+                            if ($isAttachment) {
+                                $attachments[] = [ 'part' => $partno, 'filename' => $filename ];
+                            }
+                            return $data;
+                        };
+                        $plain = ''; $html = '';
+                        if ($struct && !empty($struct->parts)) {
+                            $pno = 1;
+                            foreach ($struct->parts as $ix => $p) {
+                                $partno = (string)($ix+1);
+                                $content = $get_part($inbox2, $msgNo, $p, $partno);
+                                if ($p->type == TYPETEXT && $p->subtype == 'PLAIN' && $content !== '') { $plain .= $content; }
+                                if ($p->type == TYPETEXT && $p->subtype == 'HTML' && $content !== '') { $html .= $content; }
+                            }
+                        } else {
+                            $raw = @imap_body($inbox2, $msgNo);
+                            $plain = quoted_printable_decode($raw);
                         }
+                        $detail = [
+                            'from' => isset($hdr->fromaddress) ? (string)$hdr->fromaddress : '',
+                            'subject' => isset($hdr->subject) ? (string)imap_utf8($hdr->subject) : '',
+                            'date' => isset($hdr->date) ? (string)$hdr->date : '',
+                            'plain' => $plain,
+                            'html' => $html,
+                            'attachments' => $attachments,
+                        ];
                         @imap_close($inbox2);
                     }
                 }
@@ -569,7 +554,7 @@ try {
                     }
                   ?>
                   <?php if ($contactId) { ?>
-                    <form action="dashboard.php?tab=inbox&view=<?php echo urlencode($viewMid); ?>" method="post" style="margin-top:8px">
+                    <form action="dashboard.php?tab=inbox&view_idx=<?php echo urlencode((string)$viewIdx); ?>" method="post" style="margin-top:8px">
                       <input type="hidden" name="action" value="reply" />
                       <input type="hidden" name="email_id" value="<?php echo (int)$contactId; ?>" />
                       <input type="text" name="subject" placeholder="Subject" style="width:100%; margin-bottom:6px" required />
