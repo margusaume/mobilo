@@ -158,22 +158,28 @@ declare(strict_types=1);
                     }
                  ?>
                 <?php
-                  // Get company info for this email
+                  // Get company info for this email by checking domain
                   $companyLabel = '';
                   $fromEmail = (string)$em['from'];
+                  $domain = '';
+                  
+                  // Extract email address
                   if (preg_match('/<([^>]+)>/', $fromEmail, $mFrom)) {
                     $fromEmail = strtolower(trim($mFrom[1]));
                   } else {
                     $fromEmail = strtolower(trim($fromEmail));
                   }
                   
-                  if ($fromEmail !== '') {
+                  // Extract domain from email
+                  if (strpos($fromEmail, '@') !== false) {
+                    $domain = strtolower(trim(substr($fromEmail, strpos($fromEmail, '@') + 1)));
+                  }
+                  
+                  // Check if domain exists in companies table
+                  if ($domain !== '') {
                     try {
-                      $compStmt = $db->prepare('SELECT c.name FROM companies c 
-                                               JOIN email_company_connections ecc ON c.id = ecc.company_id 
-                                               JOIN emails e ON ecc.email_id = e.id 
-                                               WHERE e.email = :email');
-                      $compStmt->execute([':email' => $fromEmail]);
+                      $compStmt = $db->prepare('SELECT name FROM companies WHERE domain = :domain');
+                      $compStmt->execute([':domain' => $domain]);
                       $company = $compStmt->fetch();
                       if ($company) {
                         $companyLabel = '<span class="badge bg-success ms-1" title="Company: ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '</span>';
