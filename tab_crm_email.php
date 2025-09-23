@@ -17,10 +17,18 @@ declare(strict_types=1);
   <h3>Email (Contacts)</h3>
   <?php
     $rows = [];
+    $debugInfo = '';
     try {
       $emStmt = $db->query('SELECT e.id, e.email, e.name, e.company FROM emails e ORDER BY e.id DESC');
       $rows = $emStmt ? $emStmt->fetchAll(PDO::FETCH_ASSOC) : [];
-    } catch (Throwable $ign) {}
+      $debugInfo = 'Query executed successfully. Found ' . count($rows) . ' rows.';
+    } catch (Throwable $e) {
+      $debugInfo = 'Database error: ' . $e->getMessage();
+    }
+  ?>
+  <div style="background-color: #f8f9fa; padding: 8px; margin: 8px 0; border-radius: 4px; font-size: 12px; color: #666;">
+    Debug: <?php echo htmlspecialchars($debugInfo, ENT_QUOTES, 'UTF-8'); ?>
+  </div>
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['tab'] ?? '') === 'crm' && ($_GET['sub'] ?? '') === 'email') {
       $act = (string)($_POST['action'] ?? '');
