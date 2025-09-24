@@ -65,14 +65,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
         if (is_file($cfgFile)) {
             $cfg = require $cfgFile;
         } else {
-            // Use hardcoded values (same as IMAP sync)
+            // Use hardcoded values (try different SMTP settings)
             $cfg = [
                 'smtp' => [
                     'host' => 'smtp.zone.eu',
-                    'port' => 465,
+                    'port' => 587,
                     'username' => 'info@teenus.ee',
                     'password' => 'Yyd12321df42Xgus9WHT8xhic',
-                    'encryption' => 'ssl'
+                    'encryption' => 'starttls'
                 ]
             ];
         }
