@@ -270,7 +270,10 @@ if ($imapSupported) {
                 <h6 class="card-title">Message Details</h6>
                 <p class="card-text">
                   <strong>Database ID:</strong> <?php echo (int)$message['id']; ?><br>
-                  <strong>Created:</strong> <?php echo htmlspecialchars((string)$message['created_at'], ENT_QUOTES, 'UTF-8'); ?>
+                  <strong>Created:</strong> <?php echo htmlspecialchars((string)$message['created_at'], ENT_QUOTES, 'UTF-8'); ?><br>
+                  <strong>Data Source:</strong> 
+                  <span class="badge bg-info">Database</span> Basic info (headers, metadata)<br>
+                  <span class="badge bg-warning">IMAP</span> Full content & attachments
                 </p>
               </div>
             </div>

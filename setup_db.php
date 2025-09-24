@@ -122,11 +122,19 @@ try {
     foreach ($newCompanyColumns as $colName => $colType) {
         try {
             $db->exec("ALTER TABLE companies ADD COLUMN {$colName} {$colType}");
-            echo "Added {$colName} column to companies table<br>";
-        } catch (Throwable $e) {
-            echo "{$colName} column already exists in companies table<br>";
+        echo "Added {$colName} column to companies table<br>";
+            } catch (Throwable $e) {
+                echo "{$colName} column already exists in companies table<br>";
+            }
         }
-    }
+
+        // Add subject column to email_responses table if it doesn't exist
+        try {
+            $db->exec('ALTER TABLE email_responses ADD COLUMN subject TEXT');
+            echo "Added subject column to email_responses table<br>";
+        } catch (Throwable $e) {
+            echo "Subject column already exists in email_responses table<br>";
+        }
 
     echo "Seeding data...<br>";
     
