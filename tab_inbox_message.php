@@ -65,14 +65,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
         if (is_file($cfgFile)) {
             $cfg = require $cfgFile;
         } else {
-            // Use hardcoded values (try localhost SMTP)
+            // Use hardcoded values (try with new credentials)
             $cfg = [
                 'smtp' => [
-                    'host' => 'localhost',
-                    'port' => 25,
-                    'username' => '',
-                    'password' => '',
-                    'encryption' => 'none'
+                    'host' => 'smtp.zone.eu',
+                    'port' => 587,
+                    'username' => 'info@mobilo.shop',
+                    'password' => 'RIOmanch567',
+                    'encryption' => 'starttls'
                 ]
             ];
         }
