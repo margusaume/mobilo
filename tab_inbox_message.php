@@ -74,20 +74,38 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
 
         if ($smtpHost && $smtpUsername && $smtpPassword) {
             try {
-                sendSmtpEmail($smtpHost, $smtpPort, $smtpEncryption, $smtpUsername, $smtpPassword, $smtpUsername, 'System', $recipient, 'Recipient', $subject, $body);
-                $flashMessage = 'Email replied successfully!';
-
-                // Log response in inbox_sent table
-                $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
-                $stmt->execute([
-                    ':email_id' => $messageId,
-                    ':subject' => $subject,
-                    ':body' => $body,
-                    ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                    ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                ]);
+                echo '<div class="alert alert-info">Debug: Starting email send...</div>';
+                echo '<div class="alert alert-info">Debug: SMTP Host: ' . htmlspecialchars($smtpHost, ENT_QUOTES, 'UTF-8') . '</div>';
+                echo '<div class="alert alert-info">Debug: SMTP Port: ' . $smtpPort . '</div>';
+                echo '<div class="alert alert-info">Debug: SMTP Encryption: ' . htmlspecialchars($smtpEncryption, ENT_QUOTES, 'UTF-8') . '</div>';
+                echo '<div class="alert alert-info">Debug: SMTP Username: ' . htmlspecialchars($smtpUsername, ENT_QUOTES, 'UTF-8') . '</div>';
+                echo '<div class="alert alert-info">Debug: Recipient: ' . htmlspecialchars($recipient, ENT_QUOTES, 'UTF-8') . '</div>';
+                echo '<div class="alert alert-info">Debug: Subject: ' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</div>';
+                
+                $result = sendSmtpEmail($smtpHost, $smtpPort, $smtpEncryption, $smtpUsername, $smtpPassword, $smtpUsername, 'System', $recipient, 'Recipient', $subject, $body);
+                
+                echo '<div class="alert alert-info">Debug: SMTP Result: ' . htmlspecialchars(print_r($result, true), ENT_QUOTES, 'UTF-8') . '</div>';
+                
+                if ($result[0] === true) {
+                    $flashMessage = 'Email replied successfully!';
+                    
+                    // Log response in inbox_sent table
+                    $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
+                    $stmt->execute([
+                        ':email_id' => $messageId,
+                        ':subject' => $subject,
+                        ':body' => $body,
+                        ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                        ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                    ]);
+                    echo '<div class="alert alert-success">Debug: Email logged to database successfully</div>';
+                } else {
+                    $flashError = 'SMTP Error: ' . $result[1];
+                    echo '<div class="alert alert-danger">Debug: SMTP failed: ' . htmlspecialchars($result[1], ENT_QUOTES, 'UTF-8') . '</div>';
+                }
             } catch (Throwable $e) {
                 $flashError = 'Error sending reply: ' . $e->getMessage();
+                echo '<div class="alert alert-danger">Debug: Exception: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
             }
         } else {
             $flashError = 'SMTP credentials not configured. Please check config.local.php';

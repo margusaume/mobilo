@@ -26,7 +26,7 @@ function sendSmtpEmail(
 
     $fp = @fsockopen($remote, $port, $errno, $errstr, $timeout);
     if (!$fp) {
-        return [false, 'Connection failed: ' . $errstr . ' (' . $errno . ')'];
+        return [false, 'Connection failed: ' . $errstr . ' (' . $errno . ') - Remote: ' . $remote . ' Port: ' . $port];
     }
     stream_set_timeout($fp, $timeout);
 
@@ -47,10 +47,14 @@ function sendSmtpEmail(
 
     $resp = $read();
     if (strpos($resp, '220') !== 0) { fclose($fp); return [false, 'Bad greeting: ' . trim($resp)]; }
+    
+    // Debug: Log SMTP conversation (remove in production)
+    error_log("SMTP Debug - Greeting: " . trim($resp));
 
     $hostname = gethostname() ?: 'localhost';
     $write('EHLO ' . $hostname);
     $resp = $read();
+    error_log("SMTP Debug - EHLO Response: " . trim($resp));
     if (strpos($resp, '250') !== 0) { fclose($fp); return [false, 'EHLO failed: ' . trim($resp)]; }
 
     if ($encryption === 'starttls') {
@@ -69,12 +73,15 @@ function sendSmtpEmail(
     // AUTH LOGIN
     $write('AUTH LOGIN');
     $resp = $read();
+    error_log("SMTP Debug - AUTH LOGIN Response: " . trim($resp));
     if (strpos($resp, '334') !== 0) { fclose($fp); return [false, 'AUTH LOGIN not accepted: ' . trim($resp)]; }
     $write(base64_encode($username));
     $resp = $read();
+    error_log("SMTP Debug - Username Response: " . trim($resp));
     if (strpos($resp, '334') !== 0) { fclose($fp); return [false, 'Username not accepted: ' . trim($resp)]; }
     $write(base64_encode($password));
     $resp = $read();
+    error_log("SMTP Debug - Password Response: " . trim($resp));
     if (strpos($resp, '235') !== 0) { fclose($fp); return [false, 'Password not accepted: ' . trim($resp)]; }
 
     // MAIL FROM / RCPT TO
