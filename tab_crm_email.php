@@ -54,6 +54,9 @@ declare(strict_types=1);
           }
         } else if ($act === 'add_person') {
           $name = trim((string)($_POST['name'] ?? ''));
+          $email = trim((string)($_POST['email'] ?? ''));
+          $companyId = (int)($_POST['company_id'] ?? 0);
+          
           if ($name !== '') {
             try {
               // Check if person already exists
@@ -62,10 +65,40 @@ declare(strict_types=1);
               $existing = $personStmt->fetch();
               
               if (!$existing) {
-                // Add new person
-                $insPerson = $db->prepare('INSERT INTO people (name, created_at) VALUES (:n, :t)');
-                $insPerson->execute([':n' => $name, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                echo '<div style="color:green; margin:8px 0">Person added: ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>';
+                // Check if company_id column exists in people table
+                $checkColumn = $db->query("PRAGMA table_info(people)");
+                $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
+                $hasCompanyIdColumn = false;
+                foreach ($columns as $col) {
+                  if ($col['name'] === 'company_id') {
+                    $hasCompanyIdColumn = true;
+                    break;
+                  }
+                }
+                
+                // Add new person with company connection if available
+                if ($hasCompanyIdColumn) {
+                  $insPerson = $db->prepare('INSERT INTO people (name, company_id, created_at) VALUES (:n, :c, :t)');
+                  $insPerson->execute([':n' => $name, ':c' => ($companyId > 0 ? $companyId : null), ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                } else {
+                  $insPerson = $db->prepare('INSERT INTO people (name, created_at) VALUES (:n, :t)');
+                  $insPerson->execute([':n' => $name, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                }
+                
+                // Also add email to emails table if provided
+                if ($email !== '') {
+                  $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e, :n, :t)')
+                     ->execute([':e' => strtolower($email), ':n' => $name, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                }
+                
+                $message = 'Person added: ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+                if ($email !== '') {
+                  $message .= ' with email: ' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
+                }
+                if ($companyId > 0) {
+                  $message .= ' and company connection';
+                }
+                echo '<div style="color:green; margin:8px 0">' . $message . '</div>';
               } else {
                 echo '<div style="color:orange; margin:8px 0">Person already exists: ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '</div>';
               }
@@ -165,9 +198,24 @@ declare(strict_types=1);
                     } catch (Throwable $e) {
                       // Ignore errors
                     }
+                    
+                    // Get company_id if domain exists in companies table
+                    $companyId = 0;
+                    if ($domain !== '') {
+                      try {
+                        $compStmt = $db->prepare('SELECT id FROM companies WHERE domain = :d');
+                        $compStmt->execute([':d' => $domain]);
+                        $company = $compStmt->fetch();
+                        if ($company) {
+                          $companyId = (int)$company['id'];
+                        }
+                      } catch (Throwable $e) {
+                        // Ignore errors
+                      }
+                    }
                 ?>
                   <button type="button" 
-                          onclick="addPerson(<?php echo (int)$em['id']; ?>, '<?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>')"
+                          onclick="addPerson(<?php echo (int)$em['id']; ?>, '<?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>', '<?php echo htmlspecialchars($email, ENT_QUOTES, 'UTF-8'); ?>', <?php echo $companyId; ?>)"
                           style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; cursor: pointer; background-color: <?php echo $personExists ? '#d4edda' : '#f8f9fa'; ?>; color: <?php echo $personExists ? '#155724' : '#6c757d'; ?>;"
                           id="person-btn-<?php echo (int)$em['id']; ?>">
                     <?php echo $personExists ? '✓ Added' : '+ Add'; ?>
@@ -465,7 +513,7 @@ function addCompany(id, domain) {
   form.submit();
 }
 
-    function addPerson(id, name) {
+    function addPerson(id, name, email, companyId) {
       // Create a form and submit it
       const form = document.createElement('form');
       form.method = 'POST';
@@ -481,8 +529,20 @@ function addCompany(id, domain) {
       nameInput.name = 'name';
       nameInput.value = name;
       
+      const emailInput = document.createElement('input');
+      emailInput.type = 'hidden';
+      emailInput.name = 'email';
+      emailInput.value = email || '';
+      
+      const companyInput = document.createElement('input');
+      companyInput.type = 'hidden';
+      companyInput.name = 'company_id';
+      companyInput.value = companyId || 0;
+      
       form.appendChild(actionInput);
       form.appendChild(nameInput);
+      form.appendChild(emailInput);
+      form.appendChild(companyInput);
       
       document.body.appendChild(form);
       form.submit();
