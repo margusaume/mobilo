@@ -102,56 +102,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
                         ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
                     ]);
                 } else {
-                    // SMTP failed, but still log to database
-                    $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
-                    $stmt->execute([
-                        ':email_id' => $messageId,
-                        ':subject' => $subject,
-                        ':body' => $body,
-                        ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                        ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                    ]);
-                    
-                    $flashMessage = 'Email reply logged to database. Note: SMTP is blocked on this server, so the email was not actually sent.';
+                    $flashError = 'SMTP Error: ' . $result[1];
                 }
             } catch (Throwable $e) {
-                // Even if SMTP fails, log to database
-                try {
-                    $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
-                    $stmt->execute([
-                        ':email_id' => $messageId,
-                        ':subject' => $subject,
-                        ':body' => $body,
-                        ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                        ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                    ]);
-                    
-                    $flashMessage = 'Email reply logged to database. Note: SMTP is blocked on this server, so the email was not actually sent.';
-                } catch (Throwable $dbError) {
-                    $flashError = 'Error logging email: ' . $dbError->getMessage();
-                }
+                $flashError = 'Error sending reply: ' . $e->getMessage();
             }
         } else {
-            // If SMTP is not configured or blocked, just log to database
-            echo '<div class="alert alert-warning">Debug: SMTP not configured, logging email to database only</div>';
-            
-            try {
-                // Log response in inbox_sent table
-                $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
-                $stmt->execute([
-                    ':email_id' => $messageId,
-                    ':subject' => $subject,
-                    ':body' => $body,
-                    ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                    ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
-                ]);
-                
-                $flashMessage = 'Email reply logged to database. Note: SMTP is blocked on this server, so the email was not actually sent.';
-                echo '<div class="alert alert-success">Debug: Email logged to database successfully</div>';
-            } catch (Throwable $e) {
-                $flashError = 'Error logging email: ' . $e->getMessage();
-                echo '<div class="alert alert-danger">Debug: Database error: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
-            }
+            $flashError = 'SMTP credentials not configured. Please check config.local.php';
         }
     } else {
         $flashError = 'Recipient, subject, and body are required to send a reply.';
