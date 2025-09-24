@@ -131,7 +131,8 @@ try {
         // Add missing columns to email_responses table if they don't exist
         $emailResponseColumns = [
             'subject' => 'TEXT',
-            'sent_at' => 'TEXT'
+            'sent_at' => 'TEXT',
+            'created_at' => 'TEXT'
         ];
         
         foreach ($emailResponseColumns as $colName => $colType) {
@@ -140,6 +141,23 @@ try {
                 echo "Added {$colName} column to email_responses table<br>";
             } catch (Throwable $e) {
                 echo "{$colName} column already exists in email_responses table<br>";
+            }
+        }
+
+        // Add missing columns to messages table for content storage
+        $messageColumns = [
+            'content_plain' => 'TEXT',
+            'content_html' => 'TEXT',
+            'attachments' => 'TEXT',
+            'full_headers' => 'TEXT'
+        ];
+        
+        foreach ($messageColumns as $colName => $colType) {
+            try {
+                $db->exec("ALTER TABLE messages ADD COLUMN {$colName} {$colType}");
+                echo "Added {$colName} column to messages table<br>";
+            } catch (Throwable $e) {
+                echo "{$colName} column already exists in messages table<br>";
             }
         }
 

@@ -78,12 +78,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
                 $flashMessage = 'Email replied successfully!';
 
                 // Log response in email_responses table
-                $stmt = $db->prepare('INSERT INTO email_responses (email_id, subject, body, sent_at) VALUES (:email_id, :subject, :body, :sent_at)');
+                $stmt = $db->prepare('INSERT INTO email_responses (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
                 $stmt->execute([
                     ':email_id' => $messageId,
                     ':subject' => $subject,
                     ':body' => $body,
                     ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                    ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
                 ]);
             } catch (Throwable $e) {
                 $flashError = 'Error sending reply: ' . $e->getMessage();
@@ -96,78 +97,112 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
     }
 }
 
-// Fetch full email content from IMAP if available
+// Fetch email content - database first, then IMAP as fallback
 $emailContent = null;
 $attachments = [];
-$imapSupported = function_exists('imap_open');
 
-if ($imapSupported) {
-    $cfg = [];
-    $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
-    if (is_file($cfgFile)) {
-        $cfg = require $cfgFile;
+// First, try to get content from database
+$contentPlain = (string)($message['content_plain'] ?? '');
+$contentHtml = (string)($message['content_html'] ?? '');
+$attachmentsList = (string)($message['attachments'] ?? '');
+$fullHeaders = (string)($message['full_headers'] ?? '');
+
+if ($contentPlain || $contentHtml) {
+    // Content is available in database
+    $emailContent = [
+        'body' => $contentHtml ?: $contentPlain,
+        'header' => $fullHeaders,
+        'is_html' => !empty($contentHtml),
+        'source' => 'database'
+    ];
+    
+    // Parse attachments from database
+    if ($attachmentsList) {
+        $attachmentNames = explode(',', $attachmentsList);
+        foreach ($attachmentNames as $filename) {
+            $filename = trim($filename);
+            if ($filename) {
+                $attachments[] = [
+                    'filename' => $filename,
+                    'source' => 'database'
+                ];
+            }
+        }
     }
-    $imapCfg = $cfg['imap'] ?? [];
-    $host = (string)($imapCfg['host'] ?? '');
-    $port = (int)($imapCfg['port'] ?? 993);
-    $encryption = strtolower((string)($imapCfg['encryption'] ?? 'ssl'));
-    $usernameCfg = (string)($imapCfg['username'] ?? '');
-    $passwordCfg = (string)($imapCfg['password'] ?? '');
-    $validateCert = (bool)($imapCfg['validate_cert'] ?? false);
+} else {
+    // Fallback to IMAP if content not in database
+    $imapSupported = function_exists('imap_open');
+    
+    if ($imapSupported) {
+        $cfg = [];
+        $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
+        if (is_file($cfgFile)) {
+            $cfg = require $cfgFile;
+        }
+        $imapCfg = $cfg['imap'] ?? [];
+        $host = (string)($imapCfg['host'] ?? '');
+        $port = (int)($imapCfg['port'] ?? 993);
+        $encryption = strtolower((string)($imapCfg['encryption'] ?? 'ssl'));
+        $usernameCfg = (string)($imapCfg['username'] ?? '');
+        $passwordCfg = (string)($imapCfg['password'] ?? '');
+        $validateCert = (bool)($imapCfg['validate_cert'] ?? false);
 
-    if ($host && $usernameCfg && $passwordCfg) {
-        try {
-            $flags = '/imap';
-            if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
-            if ($encryption === 'starttls') { $flags .= '/tls'; }
-            if (!$validateCert) { $flags .= '/novalidate-cert'; }
-            $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
-            
-            $inbox = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, [
-                'DISABLE_AUTHENTICATOR' => 'gssapi'
-            ]);
-            
-            if ($inbox) {
-                // Find message by message_id
-                $messageIdToFetch = $message['message_id'];
-                $messageUid = imap_search($inbox, 'HEADER Message-ID "' . $messageIdToFetch . '"', SE_UID);
+        if ($host && $usernameCfg && $passwordCfg) {
+            try {
+                $flags = '/imap';
+                if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
+                if ($encryption === 'starttls') { $flags .= '/tls'; }
+                if (!$validateCert) { $flags .= '/novalidate-cert'; }
+                $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
                 
-                if ($messageUid) {
-                    $messageUid = reset($messageUid); // Get the first UID
-                    $fullHeader = imap_fetchheader($inbox, $messageUid, FT_UID);
-                    $body = imap_fetchbody($inbox, $messageUid, 1, FT_UID | FT_PEEK); // Fetch plain text part
-                    if (empty(trim($body))) {
-                        $body = imap_fetchbody($inbox, $messageUid, 2, FT_UID | FT_PEEK); // Try HTML part
-                    }
-                    $body = imap_qprint(imap_base64($body)); // Decode if quoted-printable or base64
+                $inbox = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, [
+                    'DISABLE_AUTHENTICATOR' => 'gssapi'
+                ]);
+                
+                if ($inbox) {
+                    // Find message by message_id
+                    $messageIdToFetch = $message['message_id'];
+                    $messageUid = imap_search($inbox, 'HEADER Message-ID "' . $messageIdToFetch . '"', SE_UID);
                     
-                    $emailContent = [
-                        'body' => $body,
-                        'header' => $fullHeader,
-                    ];
+                    if ($messageUid) {
+                        $messageUid = reset($messageUid); // Get the first UID
+                        $fullHeader = imap_fetchheader($inbox, $messageUid, FT_UID);
+                        $body = imap_fetchbody($inbox, $messageUid, 1, FT_UID | FT_PEEK); // Fetch plain text part
+                        if (empty(trim($body))) {
+                            $body = imap_fetchbody($inbox, $messageUid, 2, FT_UID | FT_PEEK); // Try HTML part
+                        }
+                        $body = imap_qprint(imap_base64($body)); // Decode if quoted-printable or base64
+                        
+                        $emailContent = [
+                            'body' => $body,
+                            'header' => $fullHeader,
+                            'source' => 'imap'
+                        ];
 
-                    // Fetch attachments
-                    $structure = imap_fetchstructure($inbox, $messageUid, FT_UID);
-                    if (isset($structure->parts) && count($structure->parts)) {
-                        for ($i = 0; $i < count($structure->parts); $i++) {
-                            if (isset($structure->parts[$i]->disposition) && in_array(strtolower($structure->parts[$i]->disposition), ['attachment', 'inline'])) {
-                                $filename = $structure->parts[$i]->dparameters[0]->value ?? 'attachment';
-                                $attachmentContent = imap_fetchbody($inbox, $messageUid, $i + 1, FT_UID | FT_PEEK);
-                                $attachmentContent = imap_base64($attachmentContent); // Assuming base64 for attachments
-                                
-                                $attachments[] = [
-                                    'filename' => $filename,
-                                    'content' => base64_encode($attachmentContent), // Encode for download link
-                                    'mime_type' => $structure->parts[$i]->subtype,
-                                ];
+                        // Fetch attachments
+                        $structure = imap_fetchstructure($inbox, $messageUid, FT_UID);
+                        if (isset($structure->parts) && count($structure->parts)) {
+                            for ($i = 0; $i < count($structure->parts); $i++) {
+                                if (isset($structure->parts[$i]->disposition) && in_array(strtolower($structure->parts[$i]->disposition), ['attachment', 'inline'])) {
+                                    $filename = $structure->parts[$i]->dparameters[0]->value ?? 'attachment';
+                                    $attachmentContent = imap_fetchbody($inbox, $messageUid, $i + 1, FT_UID | FT_PEEK);
+                                    $attachmentContent = imap_base64($attachmentContent); // Assuming base64 for attachments
+                                    
+                                    $attachments[] = [
+                                        'filename' => $filename,
+                                        'content' => base64_encode($attachmentContent), // Encode for download link
+                                        'mime_type' => $structure->parts[$i]->subtype,
+                                        'source' => 'imap'
+                                    ];
+                                }
                             }
                         }
                     }
+                    @imap_close($inbox);
                 }
-                @imap_close($inbox);
+            } catch (Throwable $e) {
+                // IMAP fetch failed, continue without content
             }
-        } catch (Throwable $e) {
-            // Ignore IMAP errors, fall back to database data
         }
     }
 }
@@ -324,9 +359,21 @@ if ($imapSupported) {
         <!-- Email Content -->
         <?php if ($emailContent && !empty($emailContent['body'])) { ?>
           <div class="mb-4">
-            <h5>Email Content</h5>
+            <h5>Email Content 
+              <span class="badge bg-<?php echo ($emailContent['source'] ?? '') === 'database' ? 'success' : 'warning'; ?> ms-2">
+                <?php echo ($emailContent['source'] ?? '') === 'database' ? 'Database' : 'IMAP'; ?>
+              </span>
+            </h5>
             <div class="message-content p-3" style="background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; max-height: 500px; overflow-y: auto;">
-              <?php echo nl2br(htmlspecialchars($emailContent['body'], ENT_QUOTES, 'UTF-8')); ?>
+              <?php 
+                if (!empty($emailContent['is_html'])) {
+                  // Display HTML content safely
+                  echo $emailContent['body'];
+                } else {
+                  // Display plain text content
+                  echo nl2br(htmlspecialchars($emailContent['body'], ENT_QUOTES, 'UTF-8'));
+                }
+              ?>
             </div>
           </div>
         <?php } else { ?>
@@ -348,12 +395,21 @@ if ($imapSupported) {
                   <div>
                     <i class="fas fa-paperclip me-2"></i>
                     <?php echo htmlspecialchars($attachment['filename'], ENT_QUOTES, 'UTF-8'); ?>
+                    <?php if (isset($attachment['source'])) { ?>
+                      <span class="badge bg-<?php echo $attachment['source'] === 'database' ? 'success' : 'warning'; ?> ms-2">
+                        <?php echo $attachment['source'] === 'database' ? 'DB' : 'IMAP'; ?>
+                      </span>
+                    <?php } ?>
                   </div>
-                  <a href="data:<?php echo htmlspecialchars($attachment['mime_type'], ENT_QUOTES, 'UTF-8'); ?>;base64,<?php echo $attachment['content']; ?>" 
-                     download="<?php echo htmlspecialchars($attachment['filename'], ENT_QUOTES, 'UTF-8'); ?>" 
-                     class="btn btn-sm btn-primary">
-                    <i class="fas fa-download"></i> Download
-                  </a>
+                  <?php if (isset($attachment['content'])) { ?>
+                    <a href="data:<?php echo htmlspecialchars($attachment['mime_type'], ENT_QUOTES, 'UTF-8'); ?>;base64,<?php echo $attachment['content']; ?>" 
+                       download="<?php echo htmlspecialchars($attachment['filename'], ENT_QUOTES, 'UTF-8'); ?>" 
+                       class="btn btn-sm btn-primary">
+                      <i class="fas fa-download"></i> Download
+                    </a>
+                  <?php } else { ?>
+                    <span class="text-muted">Content not available</span>
+                  <?php } ?>
                 </div>
               <?php } ?>
             </div>

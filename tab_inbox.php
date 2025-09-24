@@ -115,8 +115,130 @@ $pageStartTime = microtime(true);
                                     if ($n !== '') { $fromName = $n; }
                                 }
                                 $snippet = '';
-                                $insMsg = $db->prepare('INSERT OR IGNORE INTO messages (message_id, from_name, from_email, subject, mail_date, snippet, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:t)');
-                                $insMsg->execute([':m'=>$msgId, ':fn'=>$fromName, ':fe'=>$fromEmail, ':s'=>$subj, ':d'=>$dateStr, ':n'=>$snippet, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                                
+                                // Fetch full email content and attachments
+                                $contentPlain = '';
+                                $contentHtml = '';
+                                $attachments = '';
+                                $fullHeaders = '';
+                                
+                                try {
+                                    // Get full headers
+                                    $fullHeaders = imap_fetchheader($inbox, $i);
+                                    
+                                    // Get email structure to parse content and attachments
+                                    $structure = imap_fetchstructure($inbox, $i);
+                                    $attachmentsList = [];
+                                    
+                                    if ($structure) {
+                                        // Parse email parts for content and attachments
+                                        if (!empty($structure->parts)) {
+                                            foreach ($structure->parts as $partNum => $part) {
+                                                $partId = $partNum + 1;
+                                                $encoding = $part->encoding ?? 0;
+                                                
+                                                // Check if this part has a filename (attachment)
+                                                $filename = '';
+                                                if (!empty($part->dparameters)) {
+                                                    foreach ($part->dparameters as $dp) {
+                                                        if (strtolower($dp->attribute) === 'filename') {
+                                                            $filename = $dp->value;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                if (!$filename && !empty($part->parameters)) {
+                                                    foreach ($part->parameters as $pp) {
+                                                        if (strtolower($pp->attribute) === 'name') {
+                                                            $filename = $pp->value;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                if ($filename) {
+                                                    // This is an attachment
+                                                    $attachmentsList[] = $filename;
+                                                } else {
+                                                    // This is content
+                                                    $body = imap_fetchbody($inbox, $i, $partId);
+                                                    
+                                                    // Decode based on encoding
+                                                    switch ($encoding) {
+                                                        case 1: // 8bit
+                                                            $body = quoted_printable_decode($body);
+                                                            break;
+                                                        case 2: // binary
+                                                            $body = base64_decode($body);
+                                                            break;
+                                                        case 3: // base64
+                                                            $body = base64_decode($body);
+                                                            break;
+                                                        case 4: // quoted-printable
+                                                            $body = quoted_printable_decode($body);
+                                                            break;
+                                                    }
+                                                    
+                                                    // Determine content type
+                                                    $subtype = strtolower($part->subtype ?? '');
+                                                    if ($subtype === 'html') {
+                                                        $contentHtml = $body;
+                                                    } elseif ($subtype === 'plain') {
+                                                        $contentPlain = $body;
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            // Single part message
+                                            $body = imap_body($inbox, $i);
+                                            $encoding = $structure->encoding ?? 0;
+                                            
+                                            // Decode based on encoding
+                                            switch ($encoding) {
+                                                case 1: // 8bit
+                                                    $body = quoted_printable_decode($body);
+                                                    break;
+                                                case 2: // binary
+                                                    $body = base64_decode($body);
+                                                    break;
+                                                case 3: // base64
+                                                    $body = base64_decode($body);
+                                                    break;
+                                                case 4: // quoted-printable
+                                                    $body = quoted_printable_decode($body);
+                                                    break;
+                                            }
+                                            
+                                            $subtype = strtolower($structure->subtype ?? '');
+                                            if ($subtype === 'html') {
+                                                $contentHtml = $body;
+                                            } else {
+                                                $contentPlain = $body;
+                                            }
+                                        }
+                                    }
+                                    
+                                    $attachments = implode(',', $attachmentsList);
+                                    
+                                } catch (Throwable $contentError) {
+                                    // If content fetching fails, continue with basic info
+                                    error_log('Content fetch error: ' . $contentError->getMessage());
+                                }
+                                
+                                $insMsg = $db->prepare('INSERT OR IGNORE INTO messages (message_id, from_name, from_email, subject, mail_date, snippet, content_plain, content_html, attachments, full_headers, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:cp,:ch,:a,:h,:t)');
+                                $insMsg->execute([
+                                    ':m'=>$msgId, 
+                                    ':fn'=>$fromName, 
+                                    ':fe'=>$fromEmail, 
+                                    ':s'=>$subj, 
+                                    ':d'=>$dateStr, 
+                                    ':n'=>$snippet,
+                                    ':cp'=>$contentPlain,
+                                    ':ch'=>$contentHtml,
+                                    ':a'=>$attachments,
+                                    ':h'=>$fullHeaders,
+                                    ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)
+                                ]);
                                 if ($fromEmail !== '') {
                                     $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
                                        ->execute([':e'=>$fromEmail, ':n'=>$fromName, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
