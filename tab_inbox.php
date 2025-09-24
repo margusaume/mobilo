@@ -46,56 +46,100 @@ declare(strict_types=1);
         $limit = (int)($imapCfg['limit'] ?? 20);
 
         if ($host && $usernameCfg && $passwordCfg) {
-            $flags = '/imap';
-            if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
-            if ($encryption === 'starttls') { $flags .= '/tls'; }
-            if (!$validateCert) { $flags .= '/novalidate-cert'; }
-            $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
-            $inbox = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, [
-                'DISABLE_AUTHENTICATOR' => 'gssapi'
-            ]);
-            if ($inbox === false) {
-                $imapError = imap_last_error() ?: 'Unable to connect to mailbox.';
-            } else {
-                $num = imap_num_msg($inbox);
-                $start = max(1, $num - $limit + 1);
-                for ($i = $num; $i >= $start; $i--) {
-                    $overview = imap_headerinfo($inbox, $i);
-                    $msgId = isset($overview->message_id) ? (string)$overview->message_id : '';
-                    if ($msgId === '') {
-                        $fallback = ((string)($overview->fromaddress ?? '')) . '|' . ((string)($overview->subject ?? '')) . '|' . ((string)($overview->date ?? ''));
-                        $msgId = 'fallback:' . sha1($fallback);
-                    }
-                    $subj = isset($overview->subject) ? (string)imap_utf8($overview->subject) : '';
-                    $from = isset($overview->fromaddress) ? (string)$overview->fromaddress : '';
-                    $dateStr = isset($overview->date) ? (string)$overview->date : '';
-                    $emails[] = [
-                        'index' => $i,
-                        'message_id' => $msgId,
-                        'from' => $from,
-                        'subject' => $subj,
-                        'date' => $dateStr,
+            // First, try to get emails from database (fast)
+            try {
+                $dbEmails = $db->query('SELECT * FROM messages ORDER BY mail_date DESC LIMIT ' . $limit);
+                $emails = $dbEmails ? $dbEmails->fetchAll(PDO::FETCH_ASSOC) : [];
+                
+                // Convert database format to display format
+                $emails = array_map(function($email) {
+                    return [
+                        'index' => $email['id'],
+                        'message_id' => $email['message_id'],
+                        'from' => $email['from_name'] ? $email['from_name'] . ' <' . $email['from_email'] . '>' : $email['from_email'],
+                        'subject' => $email['subject'],
+                        'date' => $email['mail_date'],
                     ];
-                    // Upsert into messages and ensure contacts (emails)
-                    try {
-                        // parse from into name/email
-                        $fromName = null; $fromEmail = $from;
-                        if (preg_match('/<([^>]+)>/', $from, $mFrom)) {
-                            $fromEmail = strtolower(trim($mFrom[1]));
-                            $n = trim(str_replace($mFrom[0], '', $from));
-                            $n = trim($n, " \"'\t");
-                            if ($n !== '') { $fromName = $n; }
+                }, $emails);
+                
+                // Check if we need to sync with IMAP (only if database is empty or very old)
+                $lastSync = $db->query('SELECT MAX(created_at) as last_sync FROM messages')->fetch();
+                $needsSync = empty($emails) || !$lastSync || 
+                    (time() - strtotime($lastSync['last_sync'])) > 300; // 5 minutes
+                
+                if ($needsSync) {
+                    // Background sync with IMAP (only fetch new emails)
+                    $flags = '/imap';
+                    if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
+                    if ($encryption === 'starttls') { $flags .= '/tls'; }
+                    if (!$validateCert) { $flags .= '/novalidate-cert'; }
+                    $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
+                    $inbox = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, [
+                        'DISABLE_AUTHENTICATOR' => 'gssapi'
+                    ]);
+                    
+                    if ($inbox !== false) {
+                        $num = imap_num_msg($inbox);
+                        $start = max(1, $num - $limit + 1);
+                        
+                        // Only process new emails (not in database)
+                        for ($i = $num; $i >= $start; $i--) {
+                            $overview = imap_headerinfo($inbox, $i);
+                            $msgId = isset($overview->message_id) ? (string)$overview->message_id : '';
+                            if ($msgId === '') {
+                                $fallback = ((string)($overview->fromaddress ?? '')) . '|' . ((string)($overview->subject ?? '')) . '|' . ((string)($overview->date ?? ''));
+                                $msgId = 'fallback:' . sha1($fallback);
+                            }
+                            
+                            // Check if email already exists in database
+                            $exists = $db->prepare('SELECT id FROM messages WHERE message_id = :msgId');
+                            $exists->execute([':msgId' => $msgId]);
+                            if ($exists->fetch()) {
+                                continue; // Skip if already in database
+                            }
+                            
+                            $subj = isset($overview->subject) ? (string)imap_utf8($overview->subject) : '';
+                            $from = isset($overview->fromaddress) ? (string)$overview->fromaddress : '';
+                            $dateStr = isset($overview->date) ? (string)$overview->date : '';
+                            
+                            // Insert new email into database
+                            try {
+                                $fromName = null; $fromEmail = $from;
+                                if (preg_match('/<([^>]+)>/', $from, $mFrom)) {
+                                    $fromEmail = strtolower(trim($mFrom[1]));
+                                    $n = trim(str_replace($mFrom[0], '', $from));
+                                    $n = trim($n, " \"'\t");
+                                    if ($n !== '') { $fromName = $n; }
+                                }
+                                $snippet = '';
+                                $insMsg = $db->prepare('INSERT OR IGNORE INTO messages (message_id, from_name, from_email, subject, mail_date, snippet, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:t)');
+                                $insMsg->execute([':m'=>$msgId, ':fn'=>$fromName, ':fe'=>$fromEmail, ':s'=>$subj, ':d'=>$dateStr, ':n'=>$snippet, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                                if ($fromEmail !== '') {
+                                    $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
+                                       ->execute([':e'=>$fromEmail, ':n'=>$fromName, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                                }
+                            } catch (Throwable $ign) {}
                         }
-                        $snippet = '';
-                        $insMsg = $db->prepare('INSERT OR IGNORE INTO messages (message_id, from_name, from_email, subject, mail_date, snippet, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:t)');
-                        $insMsg->execute([':m'=>$msgId, ':fn'=>$fromName, ':fe'=>$fromEmail, ':s'=>$subj, ':d'=>$dateStr, ':n'=>$snippet, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                        if ($fromEmail !== '') {
-                            $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
-                               ->execute([':e'=>$fromEmail, ':n'=>$fromName, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                        }
-                    } catch (Throwable $ign) {}
+                        imap_close($inbox);
+                        
+                        // Refresh emails from database after sync
+                        $dbEmails = $db->query('SELECT * FROM messages ORDER BY mail_date DESC LIMIT ' . $limit);
+                        $emails = $dbEmails ? $dbEmails->fetchAll(PDO::FETCH_ASSOC) : [];
+                        $emails = array_map(function($email) {
+                            return [
+                                'index' => $email['id'],
+                                'message_id' => $email['message_id'],
+                                'from' => $email['from_name'] ? $email['from_name'] . ' <' . $email['from_email'] . '>' : $email['from_email'],
+                                'subject' => $email['subject'],
+                                'date' => $email['mail_date'],
+                            ];
+                        }, $emails);
+                    } else {
+                        $imapError = imap_last_error() ?: 'Unable to connect to mailbox.';
+                    }
                 }
-                imap_close($inbox);
+            } catch (Throwable $e) {
+                $imapError = 'Database error: ' . $e->getMessage();
             }
         } else {
             echo '<div class="alert alert-warning">Missing IMAP credentials. Create config.local.php and fill in your IMAP/SMTP details.</div>';
