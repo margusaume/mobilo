@@ -16,44 +16,44 @@ try {
         echo "⚠️ Could not delete channels table: " . $e->getMessage() . "<br>";
     }
     
-    // 2. Rename companies to crm_organisations
+    // 2. Delete companies table
     try {
-        $db->exec('ALTER TABLE companies RENAME TO crm_organisations');
-        echo "✅ Renamed companies to crm_organisations<br>";
+        $db->exec('DROP TABLE IF EXISTS companies');
+        echo "✅ Deleted companies table<br>";
     } catch (Throwable $e) {
-        echo "⚠️ Could not rename companies table: " . $e->getMessage() . "<br>";
+        echo "⚠️ Could not delete companies table: " . $e->getMessage() . "<br>";
     }
     
-    // 3. Rename people to crm_people
+    // 3. Delete people table
     try {
-        $db->exec('ALTER TABLE people RENAME TO crm_people');
-        echo "✅ Renamed people to crm_people<br>";
+        $db->exec('DROP TABLE IF EXISTS people');
+        echo "✅ Deleted people table<br>";
     } catch (Throwable $e) {
-        echo "⚠️ Could not rename people table: " . $e->getMessage() . "<br>";
+        echo "⚠️ Could not delete people table: " . $e->getMessage() . "<br>";
     }
     
-    // 4. Rename messages to inbox_incoming
+    // 4. Delete messages table
     try {
-        $db->exec('ALTER TABLE messages RENAME TO inbox_incoming');
-        echo "✅ Renamed messages to inbox_incoming<br>";
+        $db->exec('DROP TABLE IF EXISTS messages');
+        echo "✅ Deleted messages table<br>";
     } catch (Throwable $e) {
-        echo "⚠️ Could not rename messages table: " . $e->getMessage() . "<br>";
+        echo "⚠️ Could not delete messages table: " . $e->getMessage() . "<br>";
     }
     
-    // 5. Rename email_responses to inbox_sent
+    // 5. Delete emails table
+    try {
+        $db->exec('DROP TABLE IF EXISTS emails');
+        echo "✅ Deleted emails table<br>";
+    } catch (Throwable $e) {
+        echo "⚠️ Could not delete emails table: " . $e->getMessage() . "<br>";
+    }
+    
+    // 6. Rename email_responses to inbox_sent
     try {
         $db->exec('ALTER TABLE email_responses RENAME TO inbox_sent');
         echo "✅ Renamed email_responses to inbox_sent<br>";
     } catch (Throwable $e) {
         echo "⚠️ Could not rename email_responses table: " . $e->getMessage() . "<br>";
-    }
-    
-    // 6. Rename emails to crm_emails
-    try {
-        $db->exec('ALTER TABLE emails RENAME TO crm_emails');
-        echo "✅ Renamed emails to crm_emails<br>";
-    } catch (Throwable $e) {
-        echo "⚠️ Could not rename emails table: " . $e->getMessage() . "<br>";
     }
     
     // 7. Rename email_statuses to crm_email_status
@@ -109,7 +109,7 @@ try {
     }
     
     // 10. Check for any old tables that shouldn't exist
-    $oldTables = ['channels', 'companies', 'people', 'messages', 'email_responses', 'emails', 'email_statuses'];
+    $oldTables = ['channels', 'companies', 'people', 'messages', 'emails', 'email_responses', 'email_statuses'];
     $remainingOldTables = array_intersect($oldTables, $existingTables);
     
     if (!empty($remainingOldTables)) {
@@ -119,7 +119,7 @@ try {
         }
         echo "You may need to manually drop these tables if they're no longer needed.<br>";
     } else {
-        echo "<br>✅ All old tables have been successfully renamed or deleted!<br>";
+        echo "<br>✅ All old tables have been successfully deleted or renamed!<br>";
     }
     
     echo "<br>🎉 Database migration completed successfully!<br>";
