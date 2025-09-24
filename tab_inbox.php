@@ -77,24 +77,27 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
                   // Organization matching
                   $organizationLabels = [];
                   
-                  // 1) Check if sender email is in crm_people table
-                  $peopleStmt = $db->prepare('SELECT name FROM crm_people WHERE email = ?');
-                  $peopleStmt->execute([$email['from_email']]);
-                  $peopleMatches = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
-                  
-                  foreach ($peopleMatches as $person) {
-                    $organizationLabels[] = '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary text-decoration-none">👤 ' . htmlspecialchars($person['name'], ENT_QUOTES, 'UTF-8') . '</a>';
+                  // 1) Check if sender name matches people in crm_people table
+                  if (!empty($email['from_name'])) {
+                    $peopleStmt = $db->prepare('SELECT name FROM crm_people WHERE name = ?');
+                    $peopleStmt->execute([$email['from_name']]);
+                    $peopleMatches = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
+                    
+                    foreach ($peopleMatches as $person) {
+                      $organizationLabels[] = '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary text-decoration-none">👤 ' . htmlspecialchars($person['name'], ENT_QUOTES, 'UTF-8') . '</a>';
+                    }
                   }
                   
                   // 2) Check if sender email domain is in crm_organisations table
                   $domain = substr(strrchr($email['from_email'], '@'), 1);
                   if ($domain) {
-                    $orgStmt = $db->prepare('SELECT name FROM crm_organisations WHERE name = ?');
+                    $orgStmt = $db->prepare('SELECT name FROM crm_organisations WHERE domain = ?');
                     $orgStmt->execute([$domain]);
                     $orgMatches = $orgStmt->fetchAll(PDO::FETCH_ASSOC);
                     
                     foreach ($orgMatches as $org) {
-                      $organizationLabels[] = '<a href="dashboard.php?tab=crm&sub=organisations" class="badge bg-success text-decoration-none">🏢 ' . htmlspecialchars($org['name'], ENT_QUOTES, 'UTF-8') . '</a>';
+                      $orgName = $org['name'] ?: $domain; // Use name if available, otherwise use domain
+                      $organizationLabels[] = '<a href="dashboard.php?tab=crm&sub=organisations" class="badge bg-success text-decoration-none">🏢 ' . htmlspecialchars($orgName, ENT_QUOTES, 'UTF-8') . '</a>';
                     }
                   }
                 ?>
