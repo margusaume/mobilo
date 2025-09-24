@@ -62,8 +62,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
         // Get SMTP config
         $cfg = [];
         $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
+        echo '<div class="alert alert-info">Debug: Config file path: ' . htmlspecialchars($cfgFile, ENT_QUOTES, 'UTF-8') . '</div>';
+        echo '<div class="alert alert-info">Debug: Config file exists: ' . (is_file($cfgFile) ? 'YES' : 'NO') . '</div>';
+        
         if (is_file($cfgFile)) {
             $cfg = require $cfgFile;
+            echo '<div class="alert alert-info">Debug: Loaded config from file</div>';
         } else {
             // Use hardcoded values (try different SMTP settings)
             $cfg = [
@@ -75,7 +79,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
                     'encryption' => 'starttls'
                 ]
             ];
+            echo '<div class="alert alert-info">Debug: Using hardcoded config</div>';
         }
+        
+        echo '<div class="alert alert-info">Debug: Full config: ' . htmlspecialchars(print_r($cfg, true), ENT_QUOTES, 'UTF-8') . '</div>';
+        
         $smtpCfg = $cfg['smtp'] ?? [];
         $smtpHost = (string)($smtpCfg['host'] ?? '');
         $smtpPort = (int)($smtpCfg['port'] ?? 587);
