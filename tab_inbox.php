@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing...';
             
             // Make AJAX request to sync IMAP
-            fetch('dashboard.php?tab=inbox', {
+            fetch('debug_imap_remote.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -151,6 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             })
             .then(data => {
+                console.log('Debug output:', data.debug_output);
                 if (data.success) {
                     // Show success message
                     showAlert('success', `Successfully synced ${data.new_emails} new emails`);
