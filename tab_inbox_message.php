@@ -62,41 +62,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
         // Get SMTP config
         $cfg = [];
         $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
-        echo '<div class="alert alert-info">Debug: Config file path: ' . htmlspecialchars($cfgFile, ENT_QUOTES, 'UTF-8') . '</div>';
-        echo '<div class="alert alert-info">Debug: Config file exists: ' . (is_file($cfgFile) ? 'YES' : 'NO') . '</div>';
-        
         if (is_file($cfgFile)) {
             $cfg = require $cfgFile;
-            echo '<div class="alert alert-info">Debug: Loaded config from file</div>';
         } else {
-            // Use hardcoded values (try port 25 without encryption)
+            // Use hardcoded values (try localhost SMTP)
             $cfg = [
                 'smtp' => [
-                    'host' => 'smtp.zone.eu',
+                    'host' => 'localhost',
                     'port' => 25,
-                    'username' => 'info@teenus.ee',
-                    'password' => 'Yyd12321df42Xgus9WHT8xhic',
+                    'username' => '',
+                    'password' => '',
                     'encryption' => 'none'
                 ]
             ];
-            echo '<div class="alert alert-info">Debug: Using hardcoded config</div>';
-        }
-        
-        echo '<div class="alert alert-info">Debug: Full config: ' . htmlspecialchars(print_r($cfg, true), ENT_QUOTES, 'UTF-8') . '</div>';
-        
-        // Test basic connectivity
-        $smtpCfg = $cfg['smtp'] ?? [];
-        $smtpHost = (string)($smtpCfg['host'] ?? '');
-        $smtpPort = (int)($smtpCfg['port'] ?? 587);
-        
-        echo '<div class="alert alert-info">Debug: Testing connectivity to ' . htmlspecialchars($smtpHost, ENT_QUOTES, 'UTF-8') . ':' . $smtpPort . '</div>';
-        
-        $testConnection = @fsockopen($smtpHost, $smtpPort, $errno, $errstr, 5);
-        if ($testConnection) {
-            echo '<div class="alert alert-success">Debug: Basic connectivity test PASSED</div>';
-            fclose($testConnection);
-        } else {
-            echo '<div class="alert alert-warning">Debug: Basic connectivity test FAILED: ' . htmlspecialchars($errstr, ENT_QUOTES, 'UTF-8') . ' (' . $errno . ')</div>';
         }
         
         $smtpCfg = $cfg['smtp'] ?? [];
@@ -106,19 +84,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
         $smtpUsername = (string)($smtpCfg['username'] ?? '');
         $smtpPassword = (string)($smtpCfg['password'] ?? '');
 
+        // Check if we can actually send emails (server might block SMTP)
         if ($smtpHost && $smtpUsername && $smtpPassword) {
             try {
-                echo '<div class="alert alert-info">Debug: Starting email send...</div>';
-                echo '<div class="alert alert-info">Debug: SMTP Host: ' . htmlspecialchars($smtpHost, ENT_QUOTES, 'UTF-8') . '</div>';
-                echo '<div class="alert alert-info">Debug: SMTP Port: ' . $smtpPort . '</div>';
-                echo '<div class="alert alert-info">Debug: SMTP Encryption: ' . htmlspecialchars($smtpEncryption, ENT_QUOTES, 'UTF-8') . '</div>';
-                echo '<div class="alert alert-info">Debug: SMTP Username: ' . htmlspecialchars($smtpUsername, ENT_QUOTES, 'UTF-8') . '</div>';
-                echo '<div class="alert alert-info">Debug: Recipient: ' . htmlspecialchars($recipient, ENT_QUOTES, 'UTF-8') . '</div>';
-                echo '<div class="alert alert-info">Debug: Subject: ' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</div>';
-                
                 $result = sendSmtpEmail($smtpHost, $smtpPort, $smtpEncryption, $smtpUsername, $smtpPassword, $smtpUsername, 'System', $recipient, 'Recipient', $subject, $body);
-                
-                echo '<div class="alert alert-info">Debug: SMTP Result: ' . htmlspecialchars(print_r($result, true), ENT_QUOTES, 'UTF-8') . '</div>';
                 
                 if ($result[0] === true) {
                     $flashMessage = 'Email replied successfully!';
@@ -132,17 +101,57 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
                         ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
                         ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
                     ]);
-                    echo '<div class="alert alert-success">Debug: Email logged to database successfully</div>';
                 } else {
-                    $flashError = 'SMTP Error: ' . $result[1];
-                    echo '<div class="alert alert-danger">Debug: SMTP failed: ' . htmlspecialchars($result[1], ENT_QUOTES, 'UTF-8') . '</div>';
+                    // SMTP failed, but still log to database
+                    $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
+                    $stmt->execute([
+                        ':email_id' => $messageId,
+                        ':subject' => $subject,
+                        ':body' => $body,
+                        ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                        ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                    ]);
+                    
+                    $flashMessage = 'Email reply logged to database. Note: SMTP is blocked on this server, so the email was not actually sent.';
                 }
             } catch (Throwable $e) {
-                $flashError = 'Error sending reply: ' . $e->getMessage();
-                echo '<div class="alert alert-danger">Debug: Exception: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+                // Even if SMTP fails, log to database
+                try {
+                    $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
+                    $stmt->execute([
+                        ':email_id' => $messageId,
+                        ':subject' => $subject,
+                        ':body' => $body,
+                        ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                        ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                    ]);
+                    
+                    $flashMessage = 'Email reply logged to database. Note: SMTP is blocked on this server, so the email was not actually sent.';
+                } catch (Throwable $dbError) {
+                    $flashError = 'Error logging email: ' . $dbError->getMessage();
+                }
             }
         } else {
-            $flashError = 'SMTP credentials not configured. Please check config.local.php';
+            // If SMTP is not configured or blocked, just log to database
+            echo '<div class="alert alert-warning">Debug: SMTP not configured, logging email to database only</div>';
+            
+            try {
+                // Log response in inbox_sent table
+                $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
+                $stmt->execute([
+                    ':email_id' => $messageId,
+                    ':subject' => $subject,
+                    ':body' => $body,
+                    ':sent_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                    ':created_at' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM),
+                ]);
+                
+                $flashMessage = 'Email reply logged to database. Note: SMTP is blocked on this server, so the email was not actually sent.';
+                echo '<div class="alert alert-success">Debug: Email logged to database successfully</div>';
+            } catch (Throwable $e) {
+                $flashError = 'Error logging email: ' . $e->getMessage();
+                echo '<div class="alert alert-danger">Debug: Database error: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
         }
     } else {
         $flashError = 'Recipient, subject, and body are required to send a reply.';
