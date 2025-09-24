@@ -241,6 +241,9 @@ try {
 			// Return JSON response for AJAX
 			header('Content-Type: application/json');
 			
+			// Clear any previous output
+			ob_clean();
+			
 			try {
 				$emailIdsJson = $_POST['email_ids'] ?? '';
 				$emailIds = json_decode($emailIdsJson, true);
@@ -324,6 +327,9 @@ try {
 			// Return JSON response for AJAX
 			header('Content-Type: application/json');
 			
+			// Clear any previous output
+			ob_clean();
+			
 			try {
 				$emailIdsJson = $_POST['email_ids'] ?? '';
 				$emailIds = json_decode($emailIdsJson, true);
@@ -387,6 +393,9 @@ try {
 		if ($action === 'permanent_delete_emails') {
 			// Return JSON response for AJAX
 			header('Content-Type: application/json');
+			
+			// Clear any previous output
+			ob_clean();
 			
 			try {
 				$emailIdsJson = $_POST['email_ids'] ?? '';
