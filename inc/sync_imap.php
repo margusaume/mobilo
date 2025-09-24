@@ -1,7 +1,7 @@
 <?php
 // Separate IMAP sync endpoint
 session_start();
-require_once __DIR__ . '/inc/db.php';
+require_once __DIR__ . '/db.php';
 
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
