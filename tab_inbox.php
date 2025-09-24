@@ -5,6 +5,9 @@ declare(strict_types=1);
 
 // Start load time tracking
 $pageStartTime = microtime(true);
+
+// Get sub-tab parameter
+$sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
 ?>
 <div class="row">
   <div class="col-12">
@@ -34,7 +37,6 @@ $pageStartTime = microtime(true);
         </ul>
         
         <?php
-        $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
         if ($sub === 'list') {
           // Simple database query - no IMAP, no matching, just fast display
           $emails = [];
