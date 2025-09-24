@@ -14,16 +14,16 @@ $username = htmlspecialchars((string)($_SESSION['username'] ?? 'user'), ENT_QUOT
 $activeTab = 'users';
 if (isset($_GET['tab'])) {
     $tab = $_GET['tab'];
-    if ($tab === 'channels' || $tab === 'inbox' || $tab === 'crm' || $tab === 'admin' || $tab === 'users') {
+    if ($tab === 'crm_organisations' || $tab === 'inbox' || $tab === 'crm' || $tab === 'admin' || $tab === 'users') {
         $activeTab = $tab;
     }
 }
 
-// Prepare DB, create channels table if missing, and handle create action
+// Prepare DB, create crm_organisations table if missing, and handle create action
 $tables = [];
 $tableSamples = [];
-$channels = [];
-$emailsList = [];
+$crm_organisations = [];
+$crm_emailsList = [];
 $emailStatuses = [];
 $flashMessage = '';
 $flashError = '';
@@ -34,8 +34,8 @@ try {
 	if (!is_dir($uploadsDir)) {
 		@mkdir($uploadsDir, 0775, true);
 	}
-	// Ensure channels table exists
-	$db->exec('CREATE TABLE IF NOT EXISTS channels (
+	// Ensure crm_organisations table exists
+	$db->exec('CREATE TABLE IF NOT EXISTS crm_organisations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
 		homepage_url TEXT NOT NULL,
@@ -44,12 +44,12 @@ try {
 	)');
 
     // Email-related tables
-    $db->exec('CREATE TABLE IF NOT EXISTS email_statuses (
+    $db->exec('CREATE TABLE IF NOT EXISTS crm_email_status (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         key TEXT UNIQUE NOT NULL,
         label TEXT NOT NULL
     )');
-    $db->exec('CREATE TABLE IF NOT EXISTS emails (
+    $db->exec('CREATE TABLE IF NOT EXISTS crm_emails (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
         name TEXT,
@@ -61,7 +61,7 @@ try {
 		body TEXT NOT NULL,
 		sent_via TEXT,
 		created_at TEXT NOT NULL,
-		FOREIGN KEY(email_id) REFERENCES emails(id)
+		FOREIGN KEY(email_id) REFERENCES crm_emails(id)
 	)');
 
     // Messages table for INBOX
@@ -76,32 +76,32 @@ try {
         created_at TEXT NOT NULL
     )');
 	// Seed statuses if empty
-	$cntRow = $db->query('SELECT COUNT(1) AS c FROM email_statuses')->fetch();
+	$cntRow = $db->query('SELECT COUNT(1) AS c FROM crm_email_status')->fetch();
 	if ((int)($cntRow['c'] ?? 0) === 0) {
-		$seed = $db->prepare('INSERT INTO email_statuses (key, label) VALUES (:k, :l)');
+		$seed = $db->prepare('INSERT INTO crm_email_status (key, label) VALUES (:k, :l)');
 		foreach ([['new','New'],['read','Read'],['replied','Replied'],['ignore','Ignore'],['marketing','Marketing']] as $s) {
 			$seed->execute([':k'=>$s[0], ':l'=>$s[1]]);
 		}
 	}
     // Load statuses (still available for future use)
-    $st = $db->query('SELECT id, key, label FROM email_statuses ORDER BY id');
+    $st = $db->query('SELECT id, key, label FROM crm_email_status ORDER BY id');
     while ($row = $st->fetch(PDO::FETCH_ASSOC)) { $emailStatuses[(int)$row['id']] = $row; }
 
-    // Auto-migrate legacy emails schema to new unique (email, name) schema
+    // Auto-migrate legacy crm_emails schema to new unique (email, name) schema
     $cols = [];
-    $ti = $db->query('PRAGMA table_info(emails)');
+    $ti = $db->query('PRAGMA table_info(crm_emails)');
     while ($ci = $ti->fetch(PDO::FETCH_ASSOC)) { $cols[] = $ci['name']; }
     if (in_array('message_id', $cols, true) || in_array('from_addr', $cols, true)) {
         $db->beginTransaction();
         try {
-            $db->exec('CREATE TABLE IF NOT EXISTS emails_new (
+            $db->exec('CREATE TABLE IF NOT EXISTS crm_emails_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 email TEXT UNIQUE NOT NULL,
                 name TEXT,
                 created_at TEXT NOT NULL
             )');
             // Extract distinct email/name from legacy rows
-            $legacy = $db->query('SELECT DISTINCT from_addr FROM emails WHERE from_addr IS NOT NULL');
+            $legacy = $db->query('SELECT DISTINCT from_addr FROM crm_emails WHERE from_addr IS NOT NULL');
             while ($row = $legacy->fetch(PDO::FETCH_ASSOC)) {
                 $fromAddr = (string)$row['from_addr'];
                 // parse name and email
@@ -120,12 +120,12 @@ try {
                 }
                 $emailOnly = strtolower($emailOnly);
                 if ($emailOnly !== '') {
-                    $ins = $db->prepare('INSERT OR IGNORE INTO emails_new (email, name, created_at) VALUES (:e,:n,:t)');
+                    $ins = $db->prepare('INSERT OR IGNORE INTO crm_emails_new (email, name, created_at) VALUES (:e,:n,:t)');
                     $ins->execute([':e'=>$emailOnly, ':n'=>$name, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
                 }
             }
-            $db->exec('DROP TABLE emails');
-            $db->exec('ALTER TABLE emails_new RENAME TO emails');
+            $db->exec('DROP TABLE crm_emails');
+            $db->exec('ALTER TABLE crm_emails_new RENAME TO crm_emails');
             $db->commit();
         } catch (Throwable $migrE) {
             $db->rollBack();
@@ -133,7 +133,7 @@ try {
     }
 
 	// Handle create channel POST
-	if ($activeTab === 'channels' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+	if ($activeTab === 'crm_organisations' && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 		$name = trim((string)($_POST['channel_name'] ?? ''));
 		$homepage = trim((string)($_POST['channel_homepage'] ?? ''));
 		$logoPathRel = null;
@@ -162,7 +162,7 @@ try {
 			}
 
 			if ($flashError === '') {
-				$ins = $db->prepare('INSERT INTO channels (name, homepage_url, logo_path, created_at) VALUES (:n, :h, :l, :t)');
+				$ins = $db->prepare('INSERT INTO crm_organisations (name, homepage_url, logo_path, created_at) VALUES (:n, :h, :l, :t)');
 				$ins->execute([
 					':n' => $name,
 					':h' => $homepage,
@@ -181,7 +181,7 @@ try {
 			$emailId = (int)($_POST['email_id'] ?? 0);
 			$statusId = (int)($_POST['status_id'] ?? 0);
 			if ($emailId > 0 && isset($emailStatuses[$statusId])) {
-				$db->prepare('UPDATE emails SET status_id=:s WHERE id=:id')->execute([':s'=>$statusId, ':id'=>$emailId]);
+				$db->prepare('UPDATE crm_emails SET status_id=:s WHERE id=:id')->execute([':s'=>$statusId, ':id'=>$emailId]);
 				$flashMessage = 'Status updated';
 			}
 		}
@@ -192,7 +192,7 @@ try {
 			if ($emailId > 0 && $body !== '' && $subject !== '') {
 				// find recipient address
 				$toRow = null; $toEmail=''; $toName='';
-				$stTo = $db->prepare('SELECT email, name FROM emails WHERE id = :id');
+				$stTo = $db->prepare('SELECT email, name FROM crm_emails WHERE id = :id');
 				$stTo->execute([':id'=>$emailId]);
 				$toRow = $stTo->fetch(PDO::FETCH_ASSOC);
 				if ($toRow) { $toEmail = (string)$toRow['email']; $toName = (string)($toRow['name'] ?? ''); }
@@ -221,7 +221,7 @@ try {
 							if ($s['key']==='replied') { $repliedId = $sid; break; } 
 						}
 						if ($repliedId) { 
-							$db->prepare('UPDATE emails SET status_id=:s WHERE id=:id')->execute([':s'=>$repliedId, ':id'=>$emailId]); 
+							$db->prepare('UPDATE crm_emails SET status_id=:s WHERE id=:id')->execute([':s'=>$repliedId, ':id'=>$emailId]); 
 						}
 						
 						$flashMessage = 'Email sent successfully to ' . htmlspecialchars($toEmail, ENT_QUOTES, 'UTF-8');
@@ -246,9 +246,9 @@ try {
 		$tableSamples[$t] = $rowsStmt ? $rowsStmt->fetchAll(PDO::FETCH_ASSOC) : [];
 	}
 
-	// Fetch channels list
-	$chStmt = $db->query('SELECT id, name, homepage_url, logo_path, created_at FROM channels ORDER BY id DESC');
-	$channels = $chStmt ? $chStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+	// Fetch crm_organisations list
+	// Channels table has been removed
+	$channels = [];
 } catch (Throwable $e) {
 	// swallow in demo
 }
@@ -297,7 +297,7 @@ try {
       </div>
     </div>
 
-    <?php if ($activeTab === 'channels') { ?>
+    <?php if ($activeTab === 'crm_organisations') { ?>
       <div class="row">
         <div class="col-lg-8 mx-auto">
           <div class="card">
@@ -307,7 +307,7 @@ try {
             <div class="card-body">
               <?php if ($flashMessage) { ?><div class="alert alert-success"><?php echo htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
               <?php if ($flashError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-              <form action="dashboard.php?tab=channels" method="post" enctype="multipart/form-data">
+              <form action="dashboard.php?tab=crm_organisations" method="post" enctype="multipart/form-data">
                 <div class="mb-3">
                   <label for="channel_name" class="form-label">Channel name</label>
                   <input id="channel_name" name="channel_name" type="text" class="form-control" required />
@@ -334,8 +334,8 @@ try {
               <h5 class="card-title mb-0">Channels</h5>
             </div>
             <div class="card-body">
-              <?php if (empty($channels)) { ?>
-                <p class="text-muted">No channels yet.</p>
+              <?php if (empty($crm_organisations)) { ?>
+                <p class="text-muted">No crm_organisations yet.</p>
               <?php } else { ?>
                 <div class="table-responsive">
                   <table class="table table-striped">
@@ -349,7 +349,7 @@ try {
                       </tr>
                     </thead>
                     <tbody>
-                      <?php foreach ($channels as $ch) { ?>
+                      <?php foreach ($crm_organisations as $ch) { ?>
                         <tr>
                           <td><?php echo (int)$ch['id']; ?></td>
                           <td><?php echo htmlspecialchars((string)$ch['name'], ENT_QUOTES, 'UTF-8'); ?></td>

@@ -17,7 +17,7 @@ try {
         created_at TEXT NOT NULL
     )');
 
-    $db->exec('CREATE TABLE IF NOT EXISTS emails (
+    $db->exec('CREATE TABLE IF NOT EXISTS crm_emails (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
         name TEXT,
@@ -25,7 +25,7 @@ try {
         created_at TEXT NOT NULL
     )');
 
-    $db->exec('CREATE TABLE IF NOT EXISTS messages (
+    $db->exec('CREATE TABLE IF NOT EXISTS inbox_incoming (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         message_id TEXT UNIQUE NOT NULL,
         from_name TEXT,
@@ -33,34 +33,31 @@ try {
         subject TEXT,
         mail_date TEXT,
         snippet TEXT,
+        content_plain TEXT,
+        content_html TEXT,
+        attachments TEXT,
+        full_headers TEXT,
         created_at TEXT NOT NULL
     )');
 
-    $db->exec('CREATE TABLE IF NOT EXISTS channels (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        homepage_url TEXT NOT NULL,
-        logo_path TEXT,
-        created_at TEXT NOT NULL
-    )');
-
-    $db->exec('CREATE TABLE IF NOT EXISTS email_responses (
+    $db->exec('CREATE TABLE IF NOT EXISTS inbox_sent (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email_id INTEGER NOT NULL,
         subject TEXT NOT NULL,
         body TEXT NOT NULL,
         sent_at TEXT NOT NULL,
-        FOREIGN KEY (email_id) REFERENCES emails (id)
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (email_id) REFERENCES crm_emails (id)
     )');
 
-    $db->exec('CREATE TABLE IF NOT EXISTS email_statuses (
+    $db->exec('CREATE TABLE IF NOT EXISTS crm_email_status (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
         created_at TEXT NOT NULL
     )');
 
-    // Create companies table
-    $db->exec('CREATE TABLE IF NOT EXISTS companies (
+    // Create crm_organisations table
+    $db->exec('CREATE TABLE IF NOT EXISTS crm_organisations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         domain TEXT UNIQUE NOT NULL,
         name TEXT,
@@ -78,39 +75,39 @@ try {
         email_id INTEGER NOT NULL,
         company_id INTEGER NOT NULL,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (email_id) REFERENCES emails (id),
-        FOREIGN KEY (company_id) REFERENCES companies (id),
+        FOREIGN KEY (email_id) REFERENCES crm_emails (id),
+        FOREIGN KEY (company_id) REFERENCES crm_organisations (id),
         UNIQUE(email_id, company_id)
     )');
 
-    // Create people table
-    $db->exec('CREATE TABLE IF NOT EXISTS people (
+    // Create crm_people table
+    $db->exec('CREATE TABLE IF NOT EXISTS crm_people (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
         company_id INTEGER,
         created_at TEXT NOT NULL,
-        FOREIGN KEY (company_id) REFERENCES companies (id)
+        FOREIGN KEY (company_id) REFERENCES crm_organisations (id)
     )');
 
     echo "Adding missing columns...<br>";
     
-    // Add company column to emails table if it doesn't exist
+    // Add company column to crm_emails table if it doesn't exist
     try {
-        $db->exec('ALTER TABLE emails ADD COLUMN company TEXT');
-        echo "Added company column to emails table<br>";
+        $db->exec('ALTER TABLE crm_emails ADD COLUMN company TEXT');
+        echo "Added company column to crm_emails table<br>";
     } catch (Throwable $e) {
-        echo "Company column already exists in emails table<br>";
+        echo "Company column already exists in crm_emails table<br>";
     }
 
-    // Add company_id column to people table if it doesn't exist
+    // Add company_id column to crm_people table if it doesn't exist
     try {
-        $db->exec('ALTER TABLE people ADD COLUMN company_id INTEGER');
-        echo "Added company_id column to people table<br>";
+        $db->exec('ALTER TABLE crm_people ADD COLUMN company_id INTEGER');
+        echo "Added company_id column to crm_people table<br>";
     } catch (Throwable $e) {
-        echo "Company_id column already exists in people table<br>";
+        echo "Company_id column already exists in crm_people table<br>";
     }
 
-    // Add new columns to companies table if they don't exist
+    // Add new columns to crm_organisations table if they don't exist
     $newCompanyColumns = [
         'full_name' => 'TEXT',
         'importance' => 'TEXT', 
@@ -121,14 +118,14 @@ try {
     
     foreach ($newCompanyColumns as $colName => $colType) {
         try {
-            $db->exec("ALTER TABLE companies ADD COLUMN {$colName} {$colType}");
-        echo "Added {$colName} column to companies table<br>";
+            $db->exec("ALTER TABLE crm_organisations ADD COLUMN {$colName} {$colType}");
+        echo "Added {$colName} column to crm_organisations table<br>";
             } catch (Throwable $e) {
-                echo "{$colName} column already exists in companies table<br>";
+                echo "{$colName} column already exists in crm_organisations table<br>";
             }
         }
 
-        // Add missing columns to email_responses table if they don't exist
+        // Add missing columns to inbox_sent table if they don't exist
         $emailResponseColumns = [
             'subject' => 'TEXT',
             'sent_at' => 'TEXT',
@@ -137,14 +134,14 @@ try {
         
         foreach ($emailResponseColumns as $colName => $colType) {
             try {
-                $db->exec("ALTER TABLE email_responses ADD COLUMN {$colName} {$colType}");
-                echo "Added {$colName} column to email_responses table<br>";
+                $db->exec("ALTER TABLE inbox_sent ADD COLUMN {$colName} {$colType}");
+                echo "Added {$colName} column to inbox_sent table<br>";
             } catch (Throwable $e) {
-                echo "{$colName} column already exists in email_responses table<br>";
+                echo "{$colName} column already exists in inbox_sent table<br>";
             }
         }
 
-        // Add missing columns to messages table for content storage
+        // Add missing columns to inbox_incoming table for content storage
         $messageColumns = [
             'content_plain' => 'TEXT',
             'content_html' => 'TEXT',
@@ -154,10 +151,10 @@ try {
         
         foreach ($messageColumns as $colName => $colType) {
             try {
-                $db->exec("ALTER TABLE messages ADD COLUMN {$colName} {$colType}");
-                echo "Added {$colName} column to messages table<br>";
+                $db->exec("ALTER TABLE inbox_incoming ADD COLUMN {$colName} {$colType}");
+                echo "Added {$colName} column to inbox_incoming table<br>";
             } catch (Throwable $e) {
-                echo "{$colName} column already exists in messages table<br>";
+                echo "{$colName} column already exists in inbox_incoming table<br>";
             }
         }
 
@@ -181,9 +178,9 @@ try {
         echo "Demo user already exists<br>";
     }
 
-    // Check if email_statuses table has name column, if not add it
+    // Check if crm_email_status table has name column, if not add it
     try {
-        $checkColumn = $db->query("PRAGMA table_info(email_statuses)");
+        $checkColumn = $db->query("PRAGMA table_info(crm_email_status)");
         $columns = $checkColumn ? $checkColumn->fetchAll(PDO::FETCH_ASSOC) : [];
         $hasNameColumn = false;
         foreach ($columns as $col) {
@@ -194,17 +191,17 @@ try {
         }
         
         if (!$hasNameColumn) {
-            $db->exec('ALTER TABLE email_statuses ADD COLUMN name TEXT');
-            echo "Added name column to email_statuses table<br>";
+            $db->exec('ALTER TABLE crm_email_status ADD COLUMN name TEXT');
+            echo "Added name column to crm_email_status table<br>";
         } else {
-            echo "Name column already exists in email_statuses table<br>";
+            echo "Name column already exists in crm_email_status table<br>";
         }
         
         // Insert some sample email statuses
         $statuses = ['new', 'read', 'replied', 'ignore', 'marketing'];
         $insertedCount = 0;
         foreach ($statuses as $status) {
-            $stmt = $db->prepare('INSERT OR IGNORE INTO email_statuses (name, created_at) VALUES (:n, :t)');
+            $stmt = $db->prepare('INSERT OR IGNORE INTO crm_email_status (name, created_at) VALUES (:n, :t)');
             $result = $stmt->execute([':n' => $status, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
             if ($stmt->rowCount() > 0) {
                 $insertedCount++;
@@ -212,7 +209,7 @@ try {
         }
         echo "Inserted {$insertedCount} email statuses<br>";
     } catch (Throwable $e) {
-        echo "Note: Could not update email_statuses table: " . $e->getMessage() . "<br>";
+        echo "Note: Could not update crm_email_status table: " . $e->getMessage() . "<br>";
     }
 
     echo "Database setup completed successfully!<br>";

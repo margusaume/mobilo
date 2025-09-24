@@ -95,7 +95,7 @@ $pageStartTime = microtime(true);
                             }
                             
                             // Check if email already exists in database
-                            $exists = $db->prepare('SELECT id FROM messages WHERE message_id = :msgId');
+                            $exists = $db->prepare('SELECT id FROM inbox_incoming WHERE message_id = :msgId');
                             $exists->execute([':msgId' => $msgId]);
                             if ($exists->fetch()) {
                                 continue; // Skip if already in database
@@ -225,7 +225,7 @@ $pageStartTime = microtime(true);
                                     error_log('Content fetch error: ' . $contentError->getMessage());
                                 }
                                 
-                                $insMsg = $db->prepare('INSERT OR IGNORE INTO messages (message_id, from_name, from_email, subject, mail_date, snippet, content_plain, content_html, attachments, full_headers, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:cp,:ch,:a,:h,:t)');
+                                $insMsg = $db->prepare('INSERT OR IGNORE INTO inbox_incoming (message_id, from_name, from_email, subject, mail_date, snippet, content_plain, content_html, attachments, full_headers, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:cp,:ch,:a,:h,:t)');
                                 $insMsg->execute([
                                     ':m'=>$msgId, 
                                     ':fn'=>$fromName, 
@@ -240,7 +240,7 @@ $pageStartTime = microtime(true);
                                     ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)
                                 ]);
                                 if ($fromEmail !== '') {
-                                    $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
+                                    $db->prepare('INSERT OR IGNORE INTO crm_emails (email, name, created_at) VALUES (:e,:n,:t)')
                                        ->execute([':e'=>$fromEmail, ':n'=>$fromName, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
                                 }
                             } catch (Throwable $ign) {}
@@ -248,7 +248,7 @@ $pageStartTime = microtime(true);
                         imap_close($inbox);
                         
                         // Refresh emails from database after sync
-                        $dbEmails = $db->query('SELECT * FROM messages ORDER BY mail_date DESC LIMIT ' . $limit);
+                        $dbEmails = $db->query('SELECT * FROM inbox_incoming ORDER BY mail_date DESC LIMIT ' . $limit);
                         $emails = $dbEmails ? $dbEmails->fetchAll(PDO::FETCH_ASSOC) : [];
                         $emails = array_map(function($email) {
                             return [
@@ -349,10 +349,10 @@ $pageStartTime = microtime(true);
                     $domain = strtolower(trim(substr($fromEmail, strpos($fromEmail, '@') + 1)));
                   }
                   
-                  // Check if domain exists in companies table
+                  // Check if domain exists in crm_organisations table
                   if ($domain !== '') {
                     try {
-                      $compStmt = $db->prepare('SELECT id, name FROM companies WHERE domain = :domain');
+                      $compStmt = $db->prepare('SELECT id, name FROM crm_organisations WHERE domain = :domain');
                       $compStmt->execute([':domain' => $domain]);
                       $company = $compStmt->fetch();
                       if ($company) {
@@ -366,7 +366,7 @@ $pageStartTime = microtime(true);
                   // Check if people exist in database by name
                   if ($fromName !== '') {
                     try {
-                      $peopleStmt = $db->prepare('SELECT id, name FROM people WHERE name LIKE :name');
+                      $peopleStmt = $db->prepare('SELECT id, name FROM crm_people WHERE name LIKE :name');
                       $peopleStmt->execute([':name' => '%' . $fromName . '%']);
                       $people = $peopleStmt->fetchAll();
                       if ($people) {
@@ -382,7 +382,7 @@ $pageStartTime = microtime(true);
                   // Also check if people exist by email address
                   if ($fromEmail !== '') {
                     try {
-                      $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM people p LEFT JOIN emails e ON p.name = e.name WHERE e.email = :email');
+                      $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM crm_people p LEFT JOIN crm_emails e ON p.name = e.name WHERE e.email = :email');
                       $emailPeopleStmt->execute([':email' => $fromEmail]);
                       $emailPeople = $emailPeopleStmt->fetchAll();
                       if ($emailPeople) {
@@ -445,8 +445,8 @@ $pageStartTime = microtime(true);
           $sentEmails = [];
           try {
             $stmt = $db->query('SELECT er.*, m.from_email, m.from_name, m.subject as original_subject 
-                                FROM email_responses er 
-                                LEFT JOIN messages m ON er.email_id = m.id 
+                                FROM inbox_sent er 
+                                LEFT JOIN inbox_incoming m ON er.email_id = m.id 
                                 ORDER BY er.sent_at DESC');
             $sentEmails = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
           } catch (Throwable $e) {

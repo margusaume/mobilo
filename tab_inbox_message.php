@@ -16,7 +16,7 @@ $nextMessageId = null;
 $prevMessageId = null;
 try {
     // Get all message IDs ordered by ID for navigation
-    $allMessagesStmt = $db->query('SELECT id FROM messages ORDER BY id ASC');
+    $allMessagesStmt = $db->query('SELECT id FROM inbox_incoming ORDER BY id ASC');
     $allMessageIds = $allMessagesStmt ? $allMessagesStmt->fetchAll(PDO::FETCH_COLUMN) : [];
     
     $currentIndex = array_search($messageId, $allMessageIds);
@@ -37,7 +37,7 @@ try {
 // Fetch message from database
 $message = null;
 try {
-    $stmt = $db->prepare('SELECT * FROM messages WHERE id = :id');
+    $stmt = $db->prepare('SELECT * FROM inbox_incoming WHERE id = :id');
     $stmt->execute([':id' => $messageId]);
     $message = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {
@@ -77,8 +77,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
                 sendSmtpEmail($smtpHost, $smtpPort, $smtpEncryption, $smtpUsername, $smtpPassword, $smtpUsername, 'System', $recipient, 'Recipient', $subject, $body);
                 $flashMessage = 'Email replied successfully!';
 
-                // Log response in email_responses table
-                $stmt = $db->prepare('INSERT INTO email_responses (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
+                // Log response in inbox_sent table
+                $stmt = $db->prepare('INSERT INTO inbox_sent (email_id, subject, body, sent_at, created_at) VALUES (:email_id, :subject, :body, :sent_at, :created_at)');
                 $stmt->execute([
                     ':email_id' => $messageId,
                     ':subject' => $subject,
@@ -281,7 +281,7 @@ if ($contentPlain || $contentHtml) {
               // Check if domain exists in companies table
               if ($domain !== '') {
                 try {
-                  $compStmt = $db->prepare('SELECT id, name FROM companies WHERE domain = :domain');
+                  $compStmt = $db->prepare('SELECT id, name FROM crm_organisations WHERE domain = :domain');
                   $compStmt->execute([':domain' => $domain]);
                   $company = $compStmt->fetch();
                   if ($company) {
@@ -295,7 +295,7 @@ if ($contentPlain || $contentHtml) {
               // Check if people exist in database by name
               if ($fromName !== '') {
                 try {
-                  $peopleStmt = $db->prepare('SELECT id, name FROM people WHERE name LIKE :name');
+                  $peopleStmt = $db->prepare('SELECT id, name FROM crm_people WHERE name LIKE :name');
                   $peopleStmt->execute([':name' => '%' . $fromName . '%']);
                   $people = $peopleStmt->fetchAll();
                   if ($people) {
@@ -311,7 +311,7 @@ if ($contentPlain || $contentHtml) {
               // Also check if people exist by email address
               if ($fromEmail !== '') {
                 try {
-                  $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM people p LEFT JOIN emails e ON p.name = e.name WHERE e.email = :email');
+                  $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM crm_people p LEFT JOIN crm_emails e ON p.name = e.name WHERE e.email = :email');
                   $emailPeopleStmt->execute([':email' => $fromEmail]);
                   $emailPeople = $emailPeopleStmt->fetchAll();
                   if ($emailPeople) {
