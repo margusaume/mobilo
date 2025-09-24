@@ -119,16 +119,11 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, looking for refresh button...');
     const refreshBtn = document.getElementById('refreshInboxBtn');
     const refreshIcon = document.getElementById('refreshIcon');
     
-    console.log('Refresh button element:', refreshBtn);
-    
     if (refreshBtn) {
-        console.log('Refresh button found, adding click listener');
         refreshBtn.addEventListener('click', function() {
-            console.log('Refresh button clicked!');
             // Disable button and show loading
             refreshBtn.disabled = true;
             refreshIcon.classList.add('fa-spin');
@@ -156,7 +151,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
             })
             .then(data => {
-                console.log('Debug output:', data.debug_output);
                 if (data.success) {
                     // Show success message
                     showAlert('success', `Successfully synced ${data.new_emails} new emails`);
