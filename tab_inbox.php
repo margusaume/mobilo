@@ -159,7 +159,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         window.location.reload();
                     }, 1000);
                 } else {
-                    showAlert('danger', 'Error syncing emails: ' + data.error);
+                    let errorMsg = data.error;
+                    if (errorMsg.includes('IMAP extension is not installed')) {
+                        errorMsg = 'IMAP extension is not installed on this server. Please contact your hosting provider.';
+                    } else if (errorMsg.includes('IMAP configuration missing')) {
+                        errorMsg = 'IMAP configuration is missing. Please check config.local.php file.';
+                    } else if (errorMsg.includes('Failed to connect to IMAP server')) {
+                        errorMsg = 'Failed to connect to IMAP server. Please check your credentials and server settings.';
+                    }
+                    showAlert('danger', 'Error syncing emails: ' + errorMsg);
                 }
             })
             .catch(error => {
