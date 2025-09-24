@@ -14,6 +14,7 @@ declare(strict_types=1);
       if ($act === 'update_person') {
         $id = (int)($_POST['id'] ?? 0);
         $name = trim((string)($_POST['name'] ?? ''));
+        $email = trim((string)($_POST['email'] ?? ''));
         $companyId = (int)($_POST['company_id'] ?? 0);
         
         if ($id > 0) {
@@ -54,6 +55,22 @@ declare(strict_types=1);
                 echo '<div style="color:orange; margin:8px 0">Company connections not available. <a href="setup_db.php">Run database setup</a> to add company connections.</div>';
               }
             }
+            
+            // Handle email update
+            if ($email !== '') {
+              // Get current person name to update email record
+              $personStmt = $db->prepare('SELECT name FROM people WHERE id = :id');
+              $personStmt->execute([':id' => $id]);
+              $person = $personStmt->fetch();
+              
+              if ($person) {
+                $currentName = $person['name'];
+                // Update or insert email record
+                $emailStmt = $db->prepare('INSERT OR REPLACE INTO emails (email, name, created_at) VALUES (:e, :n, :t)');
+                $emailStmt->execute([':e' => strtolower($email), ':n' => $currentName, ':t' => (new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
+                echo '<div style="color:green; margin:8px 0">✓ Email updated successfully</div>';
+              }
+            }
           } catch (Throwable $upErr) {
             echo '<div style="color:#c00; margin:8px 0">Error updating person: ' . htmlspecialchars($upErr->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
           }
@@ -77,15 +94,20 @@ declare(strict_types=1);
       }
       
       if ($hasCompanyIdColumn) {
-        $peopleStmt = $db->query('SELECT p.id, p.name, p.company_id, p.created_at, c.name as company_name, c.domain as company_domain 
+        $peopleStmt = $db->query('SELECT p.id, p.name, p.company_id, p.created_at, c.name as company_name, c.domain as company_domain,
+                                          e.email as person_email
                                   FROM people p 
                                   LEFT JOIN companies c ON p.company_id = c.id 
+                                  LEFT JOIN emails e ON p.name = e.name
                                   ORDER BY p.id DESC');
         $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people. Company_id column exists.';
       } else {
         // Fallback query without company_id
-        $peopleStmt = $db->query('SELECT id, name, created_at FROM people ORDER BY id DESC');
+        $peopleStmt = $db->query('SELECT p.id, p.name, p.created_at, e.email as person_email
+                                  FROM people p 
+                                  LEFT JOIN emails e ON p.name = e.name
+                                  ORDER BY p.id DESC');
         $people = $peopleStmt ? $peopleStmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $peopleDebugInfo = 'Query executed successfully. Found ' . count($people) . ' people. Company_id column missing - <a href="setup_db.php">run setup</a>.';
       }
@@ -116,6 +138,7 @@ declare(strict_types=1);
           <tr style="background-color: #f8f9fa;">
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">ID</th>
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Name</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Email</th>
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Company</th>
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Created</th>
             <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Actions</th>
@@ -136,11 +159,23 @@ declare(strict_types=1);
                 </form>
               </td>
               <td style="padding: 12px; border: 1px solid #ddd;">
+                <form action="dashboard.php?tab=crm&sub=people" method="post" style="display: flex; gap: 8px; align-items: center;">
+                  <input type="hidden" name="action" value="update_person" />
+                  <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
+                  <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" />
+                  <input type="hidden" name="company_id" value="<?php echo (int)($person['company_id'] ?? 0); ?>" />
+                  <input type="email" name="email" value="<?php echo htmlspecialchars((string)($person['person_email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" 
+                         style="min-width: 200px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;" placeholder="Enter email address" />
+                  <button type="submit" style="padding: 6px 12px; background-color: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Save Email</button>
+                </form>
+              </td>
+              <td style="padding: 12px; border: 1px solid #ddd;">
                 <?php if ($hasCompanyIdColumn) { ?>
                   <form action="dashboard.php?tab=crm&sub=people" method="post" style="display: flex; gap: 8px; align-items: center;">
                     <input type="hidden" name="action" value="update_person" />
                     <input type="hidden" name="id" value="<?php echo (int)$person['id']; ?>" />
                     <input type="hidden" name="name" value="<?php echo htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8'); ?>" />
+                    <input type="hidden" name="email" value="<?php echo htmlspecialchars((string)($person['person_email'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" />
                     <select name="company_id" onchange="this.form.submit()" style="min-width: 200px; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
                       <option value="0">-- No Company --</option>
                       <?php foreach ($companies as $company) { ?>

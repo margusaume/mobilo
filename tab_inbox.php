@@ -2,6 +2,9 @@
 declare(strict_types=1);
 
 // expects $db, $flashMessage, $flashError, $emailStatuses to be available
+
+// Start load time tracking
+$pageStartTime = microtime(true);
 ?>
 <div class="row">
   <div class="col-12">
@@ -159,6 +162,7 @@ declare(strict_types=1);
                 <th>Subject</th>
                 <th>Date</th>
                 <th>Organization</th>
+                <th>Load Time</th>
               </tr>
             </thead>
             <tbody>
@@ -227,24 +231,47 @@ declare(strict_types=1);
                   // Check if domain exists in companies table
                   if ($domain !== '') {
                     try {
-                      $compStmt = $db->prepare('SELECT name FROM companies WHERE domain = :domain');
+                      $compStmt = $db->prepare('SELECT id, name FROM companies WHERE domain = :domain');
                       $compStmt->execute([':domain' => $domain]);
                       $company = $compStmt->fetch();
                       if ($company) {
-                        $companyLabel = '<span class="badge bg-success" title="Company: ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars((string)$company['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+                        $companyId = (int)$company['id'];
+                        $companyName = (string)$company['name'];
+                        $companyLabel = '<a href="dashboard.php?tab=crm&sub=organisations" class="badge bg-success text-decoration-none" title="Company: ' . htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') . '</a>';
                       }
                     } catch (Throwable $ign) {}
                   }
                   
-                  // Check if people exist in database
+                  // Check if people exist in database by name
                   if ($fromName !== '') {
                     try {
-                      $peopleStmt = $db->prepare('SELECT name FROM people WHERE name LIKE :name');
+                      $peopleStmt = $db->prepare('SELECT id, name FROM people WHERE name LIKE :name');
                       $peopleStmt->execute([':name' => '%' . $fromName . '%']);
                       $people = $peopleStmt->fetchAll();
                       if ($people) {
                         foreach ($people as $person) {
-                          $peopleLabels .= '<span class="badge bg-primary ms-1" title="Person: ' . htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars((string)$person['name'], ENT_QUOTES, 'UTF-8') . '</span>';
+                          $personId = (int)$person['id'];
+                          $personName = (string)$person['name'];
+                          $peopleLabels .= '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary ms-1 text-decoration-none" title="Person: ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '</a>';
+                        }
+                      }
+                    } catch (Throwable $ign) {}
+                  }
+                  
+                  // Also check if people exist by email address
+                  if ($fromEmail !== '') {
+                    try {
+                      $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM people p LEFT JOIN emails e ON p.name = e.name WHERE e.email = :email');
+                      $emailPeopleStmt->execute([':email' => $fromEmail]);
+                      $emailPeople = $emailPeopleStmt->fetchAll();
+                      if ($emailPeople) {
+                        foreach ($emailPeople as $person) {
+                          $personId = (int)$person['id'];
+                          $personName = (string)$person['name'];
+                          // Check if this person is already in peopleLabels to avoid duplicates
+                          if (strpos($peopleLabels, $personName) === false) {
+                            $peopleLabels .= '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary ms-1 text-decoration-none" title="Person: ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '</a>';
+                          }
                         }
                       }
                     } catch (Throwable $ign) {}
@@ -275,10 +302,17 @@ declare(strict_types=1);
                       <span style="color: #999; font-size: 12px;">No matches</span>
                     <?php } ?>
                   </td>
+                  <td>
+                    <?php 
+                      $currentTime = microtime(true);
+                      $loadTime = round(($currentTime - $pageStartTime) * 1000, 2);
+                      echo '<span style="font-family: monospace; font-size: 11px; color: #666;">' . $loadTime . 'ms</span>';
+                    ?>
+                  </td>
                 </tr>
                 <?php if ($isSelected) { ?>
                   <tr>
-                    <td colspan="5" style="padding: 0; border: none;">
+                    <td colspan="6" style="padding: 0; border: none;">
                       <div class="message-detail mt-2 p-3" style="background-color: #f8f9fa; border-left: 4px solid #0d6efd;">
                         <?php
                           // Fetch email detail for selected row
