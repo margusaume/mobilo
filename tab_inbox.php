@@ -537,8 +537,7 @@ $pageStartTime = microtime(true);
         <?php } ?>
       <?php } else if ($sub === 'settings') { 
         include __DIR__ . '/tab_inbox_settings.php';
-      } ?>
-      <?php } else if ($sub === 'message') { ?>
+      } else if ($sub === 'message') { ?>
         <?php include __DIR__ . '/tab_inbox_message.php'; ?>
       <?php } ?>
       </div>
