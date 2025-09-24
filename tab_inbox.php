@@ -130,14 +130,26 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing...';
             
             // Make AJAX request to sync IMAP
-            fetch('dashboard.php?tab=inbox&action=sync_imap', {
+            fetch('dashboard.php?tab=inbox', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
                 body: 'sync_imap=1'
             })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                return response.text().then(text => {
+                    console.log('Raw response:', text);
+                    try {
+                        return JSON.parse(text);
+                    } catch (e) {
+                        console.error('JSON parse error:', e);
+                        throw new Error('Invalid JSON response: ' + text.substring(0, 200));
+                    }
+                });
+            })
             .then(data => {
                 if (data.success) {
                     // Show success message

@@ -238,6 +238,14 @@ try {
 		
 		// Handle IMAP sync
 		if (isset($_POST['sync_imap']) && $_POST['sync_imap'] === '1') {
+			// Clear any previous output
+			if (ob_get_level()) {
+				ob_clean();
+			}
+			
+			// Start output buffering to catch any errors
+			ob_start();
+			
 			// Return JSON response for AJAX
 			header('Content-Type: application/json');
 			
@@ -268,7 +276,8 @@ try {
 				$inbox = imap_open($connectionString, $username, $password);
 				
 				if (!$inbox) {
-					throw new Exception('Failed to connect to IMAP server: ' . imap_last_error());
+					$error = imap_last_error();
+					throw new Exception("Failed to connect to IMAP server: {$error}. Connection string: {$connectionString}");
 				}
 				
 				// Get message count
@@ -325,7 +334,7 @@ try {
 					}
 					
 					// Save to database
-					$stmt = $db->prepare('INSERT INTO inbox_incoming (message_id, from_email, from_name, subject, date, content_plain, attachments) VALUES (?, ?, ?, ?, ?, ?, ?)');
+					$stmt = $db->prepare('INSERT INTO inbox_incoming (message_id, from_email, from_name, subject, mail_date, content_plain, attachments, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 					$stmt->execute([
 						$messageId,
 						$fromEmail,
@@ -333,7 +342,8 @@ try {
 						$subject,
 						$date,
 						$body,
-						json_encode($attachments)
+						json_encode($attachments),
+						date('Y-m-d H:i:s')
 					]);
 					
 					$newEmailsCount++;
@@ -341,6 +351,8 @@ try {
 				
 				imap_close($inbox);
 				
+				// Clean any output buffer and send JSON
+				ob_clean();
 				echo json_encode([
 					'success' => true,
 					'new_emails' => $newEmailsCount,
@@ -348,6 +360,8 @@ try {
 				]);
 				
 			} catch (Exception $e) {
+				// Clean any output buffer and send JSON error
+				ob_clean();
 				echo json_encode([
 					'success' => false,
 					'error' => $e->getMessage()
