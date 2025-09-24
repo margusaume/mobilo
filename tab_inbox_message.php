@@ -11,6 +11,29 @@ if ($messageId <= 0) {
     return;
 }
 
+// Get next and previous message IDs for navigation
+$nextMessageId = null;
+$prevMessageId = null;
+try {
+    // Get all message IDs ordered by ID for navigation
+    $allMessagesStmt = $db->query('SELECT id FROM messages ORDER BY id ASC');
+    $allMessageIds = $allMessagesStmt ? $allMessagesStmt->fetchAll(PDO::FETCH_COLUMN) : [];
+    
+    $currentIndex = array_search($messageId, $allMessageIds);
+    if ($currentIndex !== false) {
+        // Get previous message ID
+        if ($currentIndex > 0) {
+            $prevMessageId = $allMessageIds[$currentIndex - 1];
+        }
+        // Get next message ID
+        if ($currentIndex < count($allMessageIds) - 1) {
+            $nextMessageId = $allMessageIds[$currentIndex + 1];
+        }
+    }
+} catch (Throwable $e) {
+    // Ignore errors, navigation buttons will be disabled
+}
+
 // Fetch message from database
 $message = null;
 try {
@@ -155,9 +178,27 @@ if ($imapSupported) {
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="card-title mb-0">Email Message</h5>
-        <a href="dashboard.php?tab=inbox&sub=list" class="btn btn-secondary btn-sm">
-          ← Back to Inbox
-        </a>
+        <div class="btn-group" role="group">
+          <?php if ($prevMessageId) { ?>
+            <a href="dashboard.php?tab=inbox&sub=message&id=<?php echo (int)$prevMessageId; ?>" class="btn btn-outline-primary btn-sm">
+              ← Previous
+            </a>
+          <?php } else { ?>
+            <button class="btn btn-outline-secondary btn-sm" disabled>← Previous</button>
+          <?php } ?>
+          
+          <a href="dashboard.php?tab=inbox&sub=list" class="btn btn-secondary btn-sm">
+            Back to Inbox
+          </a>
+          
+          <?php if ($nextMessageId) { ?>
+            <a href="dashboard.php?tab=inbox&sub=message&id=<?php echo (int)$nextMessageId; ?>" class="btn btn-outline-primary btn-sm">
+              Next →
+            </a>
+          <?php } else { ?>
+            <button class="btn btn-outline-secondary btn-sm" disabled>Next →</button>
+          <?php } ?>
+        </div>
       </div>
       <div class="card-body">
         <?php if ($flashMessage) { ?>

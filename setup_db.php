@@ -128,12 +128,19 @@ try {
             }
         }
 
-        // Add subject column to email_responses table if it doesn't exist
-        try {
-            $db->exec('ALTER TABLE email_responses ADD COLUMN subject TEXT');
-            echo "Added subject column to email_responses table<br>";
-        } catch (Throwable $e) {
-            echo "Subject column already exists in email_responses table<br>";
+        // Add missing columns to email_responses table if they don't exist
+        $emailResponseColumns = [
+            'subject' => 'TEXT',
+            'sent_at' => 'TEXT'
+        ];
+        
+        foreach ($emailResponseColumns as $colName => $colType) {
+            try {
+                $db->exec("ALTER TABLE email_responses ADD COLUMN {$colName} {$colType}");
+                echo "Added {$colName} column to email_responses table<br>";
+            } catch (Throwable $e) {
+                echo "{$colName} column already exists in email_responses table<br>";
+            }
         }
 
     echo "Seeding data...<br>";
