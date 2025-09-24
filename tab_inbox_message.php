@@ -51,7 +51,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
 
         if ($smtpHost && $smtpUsername && $smtpPassword) {
             try {
-                sendSmtpEmail($smtpHost, $smtpPort, $smtpEncryption, $smtpUsername, $smtpPassword, $smtpUsername, $recipient, $subject, $body);
+                sendSmtpEmail($smtpHost, $smtpPort, $smtpEncryption, $smtpUsername, $smtpPassword, $smtpUsername, 'System', $recipient, 'Recipient', $subject, $body);
                 $flashMessage = 'Email replied successfully!';
 
                 // Log response in email_responses table
@@ -185,6 +185,82 @@ if ($imapSupported) {
             <?php if (!empty($message['snippet'])) { ?>
               <div class="mb-3">
                 <strong>Snippet:</strong> <?php echo htmlspecialchars((string)$message['snippet'], ENT_QUOTES, 'UTF-8'); ?>
+              </div>
+            <?php } ?>
+            
+            <!-- Organization and People Matches -->
+            <?php
+              // Get company and people info for this email
+              $companyLabel = '';
+              $peopleLabels = '';
+              $fromEmail = (string)$message['from_email'];
+              $domain = '';
+              $fromName = (string)$message['from_name'];
+              
+              // Extract domain from email
+              if (strpos($fromEmail, '@') !== false) {
+                $domain = strtolower(trim(substr($fromEmail, strpos($fromEmail, '@') + 1)));
+              }
+              
+              // Check if domain exists in companies table
+              if ($domain !== '') {
+                try {
+                  $compStmt = $db->prepare('SELECT id, name FROM companies WHERE domain = :domain');
+                  $compStmt->execute([':domain' => $domain]);
+                  $company = $compStmt->fetch();
+                  if ($company) {
+                    $companyId = (int)$company['id'];
+                    $companyName = (string)$company['name'];
+                    $companyLabel = '<a href="dashboard.php?tab=crm&sub=organisations" class="badge bg-success text-decoration-none" title="Company: ' . htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') . '</a>';
+                  }
+                } catch (Throwable $ign) {}
+              }
+              
+              // Check if people exist in database by name
+              if ($fromName !== '') {
+                try {
+                  $peopleStmt = $db->prepare('SELECT id, name FROM people WHERE name LIKE :name');
+                  $peopleStmt->execute([':name' => '%' . $fromName . '%']);
+                  $people = $peopleStmt->fetchAll();
+                  if ($people) {
+                    foreach ($people as $person) {
+                      $personId = (int)$person['id'];
+                      $personName = (string)$person['name'];
+                      $peopleLabels .= '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary ms-1 text-decoration-none" title="Person: ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '</a>';
+                    }
+                  }
+                } catch (Throwable $ign) {}
+              }
+              
+              // Also check if people exist by email address
+              if ($fromEmail !== '') {
+                try {
+                  $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM people p LEFT JOIN emails e ON p.name = e.name WHERE e.email = :email');
+                  $emailPeopleStmt->execute([':email' => $fromEmail]);
+                  $emailPeople = $emailPeopleStmt->fetchAll();
+                  if ($emailPeople) {
+                    foreach ($emailPeople as $person) {
+                      $personId = (int)$person['id'];
+                      $personName = (string)$person['name'];
+                      // Check if this person is already in peopleLabels to avoid duplicates
+                      if (strpos($peopleLabels, $personName) === false) {
+                        $peopleLabels .= '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary ms-1 text-decoration-none" title="Person: ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '</a>';
+                      }
+                    }
+                  }
+                } catch (Throwable $ign) {}
+              }
+            ?>
+            
+            <?php if ($companyLabel || $peopleLabels) { ?>
+              <div class="mb-3">
+                <strong>CRM Matches:</strong><br>
+                <?php if ($companyLabel) { ?>
+                  <div style="margin-bottom: 4px;"><?php echo $companyLabel; ?></div>
+                <?php } ?>
+                <?php if ($peopleLabels) { ?>
+                  <div><?php echo $peopleLabels; ?></div>
+                <?php } ?>
               </div>
             <?php } ?>
           </div>
