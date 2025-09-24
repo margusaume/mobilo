@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', function() {
             refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing...';
             
             // Make AJAX request to sync IMAP
-            fetch('dashboard.php?tab=inbox', {
+            fetch('sync_imap.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
