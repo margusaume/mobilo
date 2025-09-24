@@ -64,6 +64,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
         $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
         if (is_file($cfgFile)) {
             $cfg = require $cfgFile;
+        } else {
+            // Use hardcoded values (same as IMAP sync)
+            $cfg = [
+                'smtp' => [
+                    'host' => 'smtp.zone.eu',
+                    'port' => 465,
+                    'username' => 'info@teenus.ee',
+                    'password' => 'Yyd12321df42Xgus9WHT8xhic',
+                    'encryption' => 'ssl'
+                ]
+            ];
         }
         $smtpCfg = $cfg['smtp'] ?? [];
         $smtpHost = (string)($smtpCfg['host'] ?? '');
