@@ -69,20 +69,35 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['action']) && 
             $cfg = require $cfgFile;
             echo '<div class="alert alert-info">Debug: Loaded config from file</div>';
         } else {
-            // Use hardcoded values (try different SMTP settings)
+            // Use hardcoded values (try port 25 without encryption)
             $cfg = [
                 'smtp' => [
                     'host' => 'smtp.zone.eu',
-                    'port' => 587,
+                    'port' => 25,
                     'username' => 'info@teenus.ee',
                     'password' => 'Yyd12321df42Xgus9WHT8xhic',
-                    'encryption' => 'starttls'
+                    'encryption' => 'none'
                 ]
             ];
             echo '<div class="alert alert-info">Debug: Using hardcoded config</div>';
         }
         
         echo '<div class="alert alert-info">Debug: Full config: ' . htmlspecialchars(print_r($cfg, true), ENT_QUOTES, 'UTF-8') . '</div>';
+        
+        // Test basic connectivity
+        $smtpCfg = $cfg['smtp'] ?? [];
+        $smtpHost = (string)($smtpCfg['host'] ?? '');
+        $smtpPort = (int)($smtpCfg['port'] ?? 587);
+        
+        echo '<div class="alert alert-info">Debug: Testing connectivity to ' . htmlspecialchars($smtpHost, ENT_QUOTES, 'UTF-8') . ':' . $smtpPort . '</div>';
+        
+        $testConnection = @fsockopen($smtpHost, $smtpPort, $errno, $errstr, 5);
+        if ($testConnection) {
+            echo '<div class="alert alert-success">Debug: Basic connectivity test PASSED</div>';
+            fclose($testConnection);
+        } else {
+            echo '<div class="alert alert-warning">Debug: Basic connectivity test FAILED: ' . htmlspecialchars($errstr, ENT_QUOTES, 'UTF-8') . ' (' . $errno . ')</div>';
+        }
         
         $smtpCfg = $cfg['smtp'] ?? [];
         $smtpHost = (string)($smtpCfg['host'] ?? '');
