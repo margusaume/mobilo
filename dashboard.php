@@ -235,6 +235,196 @@ try {
 				$flashError = 'Please fill in both subject and message.';
 			}
 		}
+		
+		// Handle email deletion
+		if ($action === 'delete_emails') {
+			// Return JSON response for AJAX
+			header('Content-Type: application/json');
+			
+			try {
+				$emailIdsJson = $_POST['email_ids'] ?? '';
+				$emailIds = json_decode($emailIdsJson, true);
+				
+				if (!is_array($emailIds) || empty($emailIds)) {
+					throw new Exception('No email IDs provided');
+				}
+				
+				// Ensure inbox_deleted table exists
+				$db->exec('CREATE TABLE IF NOT EXISTS inbox_deleted (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					message_id TEXT UNIQUE NOT NULL,
+					from_name TEXT,
+					from_email TEXT,
+					subject TEXT,
+					mail_date TEXT,
+					snippet TEXT,
+					content_plain TEXT,
+					content_html TEXT,
+					attachments TEXT,
+					full_headers TEXT,
+					created_at TEXT NOT NULL,
+					deleted_at TEXT NOT NULL
+				)');
+				
+				$deletedCount = 0;
+				$deletedAt = date('Y-m-d H:i:s');
+				
+				foreach ($emailIds as $emailId) {
+					$emailId = (int)$emailId;
+					if ($emailId <= 0) continue;
+					
+					// Get email data from inbox_incoming
+					$stmt = $db->prepare('SELECT * FROM inbox_incoming WHERE id = ?');
+					$stmt->execute([$emailId]);
+					$email = $stmt->fetch(PDO::FETCH_ASSOC);
+					
+					if ($email) {
+						// Insert into inbox_deleted
+						$stmt = $db->prepare('INSERT INTO inbox_deleted (message_id, from_name, from_email, subject, mail_date, snippet, content_plain, content_html, attachments, full_headers, created_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+						$stmt->execute([
+							$email['message_id'],
+							$email['from_name'],
+							$email['from_email'],
+							$email['subject'],
+							$email['mail_date'],
+							$email['snippet'] ?? '',
+							$email['content_plain'] ?? '',
+							$email['content_html'] ?? '',
+							$email['attachments'] ?? '',
+							$email['full_headers'] ?? '',
+							$email['created_at'],
+							$deletedAt
+						]);
+						
+						// Delete from inbox_incoming
+						$stmt = $db->prepare('DELETE FROM inbox_incoming WHERE id = ?');
+						$stmt->execute([$emailId]);
+						
+						$deletedCount++;
+					}
+				}
+				
+				echo json_encode([
+					'success' => true,
+					'deleted_count' => $deletedCount,
+					'message' => "Successfully moved {$deletedCount} email(s) to deleted folder"
+				]);
+				
+			} catch (Exception $e) {
+				echo json_encode([
+					'success' => false,
+					'error' => $e->getMessage()
+				]);
+			}
+			exit;
+		}
+		
+		// Handle email restoration
+		if ($action === 'restore_emails') {
+			// Return JSON response for AJAX
+			header('Content-Type: application/json');
+			
+			try {
+				$emailIdsJson = $_POST['email_ids'] ?? '';
+				$emailIds = json_decode($emailIdsJson, true);
+				
+				if (!is_array($emailIds) || empty($emailIds)) {
+					throw new Exception('No email IDs provided');
+				}
+				
+				$restoredCount = 0;
+				
+				foreach ($emailIds as $emailId) {
+					$emailId = (int)$emailId;
+					if ($emailId <= 0) continue;
+					
+					// Get email data from inbox_deleted
+					$stmt = $db->prepare('SELECT * FROM inbox_deleted WHERE id = ?');
+					$stmt->execute([$emailId]);
+					$email = $stmt->fetch(PDO::FETCH_ASSOC);
+					
+					if ($email) {
+						// Insert back into inbox_incoming
+						$stmt = $db->prepare('INSERT INTO inbox_incoming (message_id, from_name, from_email, subject, mail_date, snippet, content_plain, content_html, attachments, full_headers, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+						$stmt->execute([
+							$email['message_id'],
+							$email['from_name'],
+							$email['from_email'],
+							$email['subject'],
+							$email['mail_date'],
+							$email['snippet'],
+							$email['content_plain'],
+							$email['content_html'],
+							$email['attachments'],
+							$email['full_headers'],
+							$email['created_at']
+						]);
+						
+						// Delete from inbox_deleted
+						$stmt = $db->prepare('DELETE FROM inbox_deleted WHERE id = ?');
+						$stmt->execute([$emailId]);
+						
+						$restoredCount++;
+					}
+				}
+				
+				echo json_encode([
+					'success' => true,
+					'restored_count' => $restoredCount,
+					'message' => "Successfully restored {$restoredCount} email(s)"
+				]);
+				
+			} catch (Exception $e) {
+				echo json_encode([
+					'success' => false,
+					'error' => $e->getMessage()
+				]);
+			}
+			exit;
+		}
+		
+		// Handle permanent email deletion
+		if ($action === 'permanent_delete_emails') {
+			// Return JSON response for AJAX
+			header('Content-Type: application/json');
+			
+			try {
+				$emailIdsJson = $_POST['email_ids'] ?? '';
+				$emailIds = json_decode($emailIdsJson, true);
+				
+				if (!is_array($emailIds) || empty($emailIds)) {
+					throw new Exception('No email IDs provided');
+				}
+				
+				$deletedCount = 0;
+				
+				foreach ($emailIds as $emailId) {
+					$emailId = (int)$emailId;
+					if ($emailId <= 0) continue;
+					
+					// Delete from inbox_deleted
+					$stmt = $db->prepare('DELETE FROM inbox_deleted WHERE id = ?');
+					$result = $stmt->execute([$emailId]);
+					
+					if ($result && $stmt->rowCount() > 0) {
+						$deletedCount++;
+					}
+				}
+				
+				echo json_encode([
+					'success' => true,
+					'deleted_count' => $deletedCount,
+					'message' => "Successfully permanently deleted {$deletedCount} email(s)"
+				]);
+				
+			} catch (Exception $e) {
+				echo json_encode([
+					'success' => false,
+					'error' => $e->getMessage()
+				]);
+			}
+			exit;
+		}
 	}
 
 	// Fetch for Users tab (existing overview)

@@ -32,6 +32,9 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
             <a class="nav-link <?php echo ($_GET['sub'] ?? '') === 'sent' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=sent">Sent</a>
           </li>
           <li class="nav-item">
+            <a class="nav-link <?php echo ($_GET['sub'] ?? '') === 'deleted' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=deleted">Deleted</a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link <?php echo ($_GET['sub'] ?? '') === 'settings' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=settings">Settings</a>
           </li>
         </ul>
@@ -49,10 +52,20 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
         ?>
         
         <?php if (!empty($emails)) { ?>
+          <div class="mb-3">
+            <button type="button" class="btn btn-danger" id="deleteSelectedBtn" disabled>
+              <i class="fas fa-trash"></i> Delete Selected
+            </button>
+            <span class="ms-2 text-muted" id="selectedCount">0 selected</span>
+          </div>
+          
           <div class="table-responsive">
             <table class="table table-hover email-table">
               <thead>
                 <tr>
+                  <th>
+                    <input type="checkbox" id="selectAll" class="form-check-input">
+                  </th>
                   <th>#</th>
                   <th>From</th>
                   <th>Subject</th>
@@ -101,10 +114,13 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
                     }
                   }
                 ?>
-                  <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
-                    <td><?php echo (int)$email['id']; ?></td>
-                    <td><?php echo htmlspecialchars($fromDisplay, ENT_QUOTES, 'UTF-8'); ?></td>
+                  <tr>
                     <td>
+                      <input type="checkbox" class="form-check-input email-checkbox" value="<?php echo (int)$email['id']; ?>" onclick="event.stopPropagation();">
+                    </td>
+                    <td style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'"><?php echo (int)$email['id']; ?></td>
+                    <td style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'"><?php echo htmlspecialchars($fromDisplay, ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
                       <?php echo htmlspecialchars((string)$email['subject'], ENT_QUOTES, 'UTF-8'); ?>
                       <?php if ($attachmentCount > 0) { ?>
                         <span class="badge bg-info ms-2" title="<?php echo $attachmentCount; ?> attachment(s)">
@@ -112,15 +128,15 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
                         </span>
                       <?php } ?>
                     </td>
-                    <td><?php echo htmlspecialchars((string)$email['mail_date'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td>
+                    <td style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'"><?php echo htmlspecialchars((string)$email['mail_date'], ENT_QUOTES, 'UTF-8'); ?></td>
+                    <td style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
                       <?php if (!empty($organizationLabels)) { ?>
                         <?php echo implode(' ', $organizationLabels); ?>
                       <?php } else { ?>
                         <span style="color: #999; font-size: 12px;">No matches</span>
                       <?php } ?>
                     </td>
-                    <td>
+                    <td style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
                       <?php 
                         $currentTime = microtime(true);
                         $loadTime = round(($currentTime - $pageStartTime) * 1000, 2);
@@ -138,6 +154,8 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
         
         <?php } else if ($sub === 'sent') { 
           include __DIR__ . '/tab_inbox_sent.php';
+        } else if ($sub === 'deleted') { 
+          include __DIR__ . '/tab_inbox_deleted.php';
         } else if ($sub === 'settings') { 
           include __DIR__ . '/tab_inbox_settings.php';
         } else if ($sub === 'message') { ?>
@@ -233,6 +251,111 @@ document.addEventListener('DOMContentLoaded', function() {
                 alertDiv.remove();
             }
         }, 5000);
+    }
+    
+    // Email deletion functionality
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const emailCheckboxes = document.querySelectorAll('.email-checkbox');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    
+    // Select all functionality
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            emailCheckboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateDeleteButton();
+        });
+    }
+    
+    // Individual checkbox functionality
+    emailCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updateDeleteButton();
+            updateSelectAllState();
+        });
+    });
+    
+    // Delete selected emails
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', function() {
+            const selectedIds = Array.from(emailCheckboxes)
+                .filter(checkbox => checkbox.checked)
+                .map(checkbox => checkbox.value);
+            
+            if (selectedIds.length === 0) {
+                alert('Please select emails to delete.');
+                return;
+            }
+            
+            if (confirm(`Are you sure you want to delete ${selectedIds.length} email(s)?`)) {
+                deleteEmails(selectedIds);
+            }
+        });
+    }
+    
+    function updateDeleteButton() {
+        const selectedCount = document.querySelectorAll('.email-checkbox:checked').length;
+        if (deleteSelectedBtn) {
+            deleteSelectedBtn.disabled = selectedCount === 0;
+        }
+        if (selectedCountSpan) {
+            selectedCountSpan.textContent = `${selectedCount} selected`;
+        }
+    }
+    
+    function updateSelectAllState() {
+        const totalCheckboxes = emailCheckboxes.length;
+        const checkedCheckboxes = document.querySelectorAll('.email-checkbox:checked').length;
+        
+        if (selectAllCheckbox) {
+            if (checkedCheckboxes === 0) {
+                selectAllCheckbox.indeterminate = false;
+                selectAllCheckbox.checked = false;
+            } else if (checkedCheckboxes === totalCheckboxes) {
+                selectAllCheckbox.indeterminate = false;
+                selectAllCheckbox.checked = true;
+            } else {
+                selectAllCheckbox.indeterminate = true;
+            }
+        }
+    }
+    
+    function deleteEmails(emailIds) {
+        // Show loading state
+        deleteSelectedBtn.disabled = true;
+        deleteSelectedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        
+        // Make AJAX request to delete emails
+        fetch('dashboard.php?tab=inbox&action=delete_emails', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'email_ids=' + encodeURIComponent(JSON.stringify(emailIds))
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('success', `Successfully deleted ${data.deleted_count} email(s)`);
+                // Refresh the page to show updated list
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                showAlert('danger', 'Error deleting emails: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', 'Error deleting emails: ' + error.message);
+        })
+        .finally(() => {
+            // Reset button state
+            deleteSelectedBtn.disabled = false;
+            deleteSelectedBtn.innerHTML = '<i class="fas fa-trash"></i> Delete Selected';
+        });
     }
 });
 </script>

@@ -91,6 +91,15 @@ try {
         $fromEmail = $from ? $from->mailbox . '@' . $from->host : '';
         $fromName = $from ? ($from->personal ?? '') : '';
         $subject = $header->subject ?? '';
+        
+        // Decode MIME-encoded subject
+        $subject = imap_mime_header_decode($subject);
+        $decodedSubject = '';
+        foreach ($subject as $part) {
+            $decodedSubject .= $part->text;
+        }
+        $subject = $decodedSubject;
+        
         $date = $header->date ?? '';
         
         // Get email body
