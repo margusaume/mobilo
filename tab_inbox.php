@@ -25,521 +25,179 @@ $pageStartTime = microtime(true);
             <a class="nav-link <?php echo ($_GET['sub'] ?? '') === 'settings' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=settings">Settings</a>
           </li>
         </ul>
+        
         <?php
         $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
         if ($sub === 'list') {
-          $imapSupported = function_exists('imap_open');
+          // Simple database query - no IMAP, no matching, just fast display
           $emails = [];
-          $imapError = '';
-          if (!$imapSupported) {
-              echo '<div class="alert alert-danger">PHP IMAP extension is not available on this server.</div>';
-          } else {
-        $cfg = [];
-        $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
-        if (is_file($cfgFile)) {
-            $cfg = require $cfgFile;
-        }
-        $imapCfg = $cfg['imap'] ?? [];
-        $host = (string)($imapCfg['host'] ?? '');
-        $port = (int)($imapCfg['port'] ?? 993);
-        $encryption = strtolower((string)($imapCfg['encryption'] ?? 'ssl'));
-        $usernameCfg = (string)($imapCfg['username'] ?? '');
-        $passwordCfg = (string)($imapCfg['password'] ?? '');
-        $validateCert = (bool)($imapCfg['validate_cert'] ?? false);
-        $limit = (int)($imapCfg['limit'] ?? 20);
-
-        if ($host && $usernameCfg && $passwordCfg) {
-            // First, try to get emails from database (fast)
-            try {
-                $dbEmails = $db->query('SELECT * FROM messages ORDER BY mail_date DESC LIMIT ' . $limit);
-                $emails = $dbEmails ? $dbEmails->fetchAll(PDO::FETCH_ASSOC) : [];
-                
-                // Convert database format to display format
-                $emails = array_map(function($email) {
-                    return [
-                        'index' => $email['id'],
-                        'message_id' => $email['message_id'],
-                        'from' => $email['from_name'] ? $email['from_name'] . ' <' . $email['from_email'] . '>' : $email['from_email'],
-                        'subject' => $email['subject'],
-                        'date' => $email['mail_date'],
-                    ];
-                }, $emails);
-                
-                // Check if we need to sync with IMAP (only if database is empty or very old)
-                $lastSync = $db->query('SELECT MAX(created_at) as last_sync FROM messages')->fetch();
-                $needsSync = empty($emails) || !$lastSync || 
-                    (time() - strtotime($lastSync['last_sync'])) > 300; // 5 minutes
-                
-                if ($needsSync) {
-                    // Background sync with IMAP (only fetch new emails)
-                    $flags = '/imap';
-                    if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
-                    if ($encryption === 'starttls') { $flags .= '/tls'; }
-                    if (!$validateCert) { $flags .= '/novalidate-cert'; }
-                    $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
-                    $inbox = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, [
-                        'DISABLE_AUTHENTICATOR' => 'gssapi'
-                    ]);
-                    
-                    if ($inbox !== false) {
-                        $num = imap_num_msg($inbox);
-                        $start = max(1, $num - $limit + 1);
-                        
-                        // Only process new emails (not in database)
-                        for ($i = $num; $i >= $start; $i--) {
-                            $overview = imap_headerinfo($inbox, $i);
-                            $msgId = isset($overview->message_id) ? (string)$overview->message_id : '';
-                            if ($msgId === '') {
-                                $fallback = ((string)($overview->fromaddress ?? '')) . '|' . ((string)($overview->subject ?? '')) . '|' . ((string)($overview->date ?? ''));
-                                $msgId = 'fallback:' . sha1($fallback);
-                            }
-                            
-                            // Check if email already exists in database
-                            $exists = $db->prepare('SELECT id FROM inbox_incoming WHERE message_id = :msgId');
-                            $exists->execute([':msgId' => $msgId]);
-                            if ($exists->fetch()) {
-                                continue; // Skip if already in database
-                            }
-                            
-                            $subj = isset($overview->subject) ? (string)imap_utf8($overview->subject) : '';
-                            $from = isset($overview->fromaddress) ? (string)$overview->fromaddress : '';
-                            $dateStr = isset($overview->date) ? (string)$overview->date : '';
-                            
-                            // Insert new email into database
-                            try {
-                                $fromName = null; $fromEmail = $from;
-                                if (preg_match('/<([^>]+)>/', $from, $mFrom)) {
-                                    $fromEmail = strtolower(trim($mFrom[1]));
-                                    $n = trim(str_replace($mFrom[0], '', $from));
-                                    $n = trim($n, " \"'\t");
-                                    if ($n !== '') { $fromName = $n; }
-                                }
-                                $snippet = '';
-                                
-                                // Fetch full email content and attachments
-                                $contentPlain = '';
-                                $contentHtml = '';
-                                $attachments = '';
-                                $fullHeaders = '';
-                                
-                                try {
-                                    // Get full headers
-                                    $fullHeaders = imap_fetchheader($inbox, $i);
-                                    
-                                    // Get email structure to parse content and attachments
-                                    $structure = imap_fetchstructure($inbox, $i);
-                                    $attachmentsList = [];
-                                    
-                                    if ($structure) {
-                                        // Parse email parts for content and attachments
-                                        if (!empty($structure->parts)) {
-                                            foreach ($structure->parts as $partNum => $part) {
-                                                $partId = $partNum + 1;
-                                                $encoding = $part->encoding ?? 0;
-                                                
-                                                // Check if this part has a filename (attachment)
-                                                $filename = '';
-                                                if (!empty($part->dparameters)) {
-                                                    foreach ($part->dparameters as $dp) {
-                                                        if (strtolower($dp->attribute) === 'filename') {
-                                                            $filename = $dp->value;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                                if (!$filename && !empty($part->parameters)) {
-                                                    foreach ($part->parameters as $pp) {
-                                                        if (strtolower($pp->attribute) === 'name') {
-                                                            $filename = $pp->value;
-                                                            break;
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                if ($filename) {
-                                                    // This is an attachment
-                                                    $attachmentsList[] = $filename;
-                                                } else {
-                                                    // This is content
-                                                    $body = imap_fetchbody($inbox, $i, $partId);
-                                                    
-                                                    // Decode based on encoding
-                                                    switch ($encoding) {
-                                                        case 1: // 8bit
-                                                            $body = quoted_printable_decode($body);
-                                                            break;
-                                                        case 2: // binary
-                                                            $body = base64_decode($body);
-                                                            break;
-                                                        case 3: // base64
-                                                            $body = base64_decode($body);
-                                                            break;
-                                                        case 4: // quoted-printable
-                                                            $body = quoted_printable_decode($body);
-                                                            break;
-                                                    }
-                                                    
-                                                    // Determine content type
-                                                    $subtype = strtolower($part->subtype ?? '');
-                                                    if ($subtype === 'html') {
-                                                        $contentHtml = $body;
-                                                    } elseif ($subtype === 'plain') {
-                                                        $contentPlain = $body;
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            // Single part message
-                                            $body = imap_body($inbox, $i);
-                                            $encoding = $structure->encoding ?? 0;
-                                            
-                                            // Decode based on encoding
-                                            switch ($encoding) {
-                                                case 1: // 8bit
-                                                    $body = quoted_printable_decode($body);
-                                                    break;
-                                                case 2: // binary
-                                                    $body = base64_decode($body);
-                                                    break;
-                                                case 3: // base64
-                                                    $body = base64_decode($body);
-                                                    break;
-                                                case 4: // quoted-printable
-                                                    $body = quoted_printable_decode($body);
-                                                    break;
-                                            }
-                                            
-                                            $subtype = strtolower($structure->subtype ?? '');
-                                            if ($subtype === 'html') {
-                                                $contentHtml = $body;
-                                            } else {
-                                                $contentPlain = $body;
-                                            }
-                                        }
-                                    }
-                                    
-                                    $attachments = implode(',', $attachmentsList);
-                                    
-                                } catch (Throwable $contentError) {
-                                    // If content fetching fails, continue with basic info
-                                    error_log('Content fetch error: ' . $contentError->getMessage());
-                                }
-                                
-                                $insMsg = $db->prepare('INSERT OR IGNORE INTO inbox_incoming (message_id, from_name, from_email, subject, mail_date, snippet, content_plain, content_html, attachments, full_headers, created_at) VALUES (:m,:fn,:fe,:s,:d,:n,:cp,:ch,:a,:h,:t)');
-                                $insMsg->execute([
-                                    ':m'=>$msgId, 
-                                    ':fn'=>$fromName, 
-                                    ':fe'=>$fromEmail, 
-                                    ':s'=>$subj, 
-                                    ':d'=>$dateStr, 
-                                    ':n'=>$snippet,
-                                    ':cp'=>$contentPlain,
-                                    ':ch'=>$contentHtml,
-                                    ':a'=>$attachments,
-                                    ':h'=>$fullHeaders,
-                                    ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)
-                                ]);
-                                if ($fromEmail !== '') {
-                                    $db->prepare('INSERT OR IGNORE INTO crm_emails (email, name, created_at) VALUES (:e,:n,:t)')
-                                       ->execute([':e'=>$fromEmail, ':n'=>$fromName, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                                }
-                            } catch (Throwable $ign) {}
-                        }
-                        imap_close($inbox);
-                        
-                        // Refresh emails from database after sync
-                        $dbEmails = $db->query('SELECT * FROM inbox_incoming ORDER BY mail_date DESC LIMIT ' . $limit);
-                        $emails = $dbEmails ? $dbEmails->fetchAll(PDO::FETCH_ASSOC) : [];
-                        $emails = array_map(function($email) {
-                            return [
-                                'index' => $email['id'],
-                                'message_id' => $email['message_id'],
-                                'from' => $email['from_name'] ? $email['from_name'] . ' <' . $email['from_email'] . '>' : $email['from_email'],
-                                'subject' => $email['subject'],
-                                'date' => $email['mail_date'],
-                            ];
-                        }, $emails);
-                    } else {
-                        $imapError = imap_last_error() ?: 'Unable to connect to mailbox.';
-                    }
-                }
-            } catch (Throwable $e) {
-                $imapError = 'Database error: ' . $e->getMessage();
-            }
-        } else {
-            echo '<div class="alert alert-warning">Missing IMAP credentials. Create config.local.php and fill in your IMAP/SMTP details.</div>';
-        }
-      }
-      ?>
-      <?php if ($flashMessage) { ?><div class="alert alert-success"><?php echo htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-      <?php if ($flashError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($flashError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-      <?php if ($imapError) { ?><div class="alert alert-danger"><?php echo htmlspecialchars($imapError, ENT_QUOTES, 'UTF-8'); ?></div><?php } ?>
-      <?php if (!empty($emails)) { ?>
-        <div class="table-responsive">
-          <table class="table table-hover email-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>From</th>
-                <th>Subject</th>
-                <th>Date</th>
-                <th>Organization</th>
-                <th>Load Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php 
-              $viewIdx = isset($_GET['view_idx']) ? (int)$_GET['view_idx'] : 0;
-              foreach ($emails as $em) {
-                    // use row index for view - navigate to message page
-                    $viewUrl = 'dashboard.php?tab=inbox&sub=message&id=' . urlencode((string)$em['index']);
-                    
-                    // Check for attachments in this email
-                    $attachmentCount = 0;
-                    if ($host && $usernameCfg && $passwordCfg) {
-                        try {
-                            $flags = '/imap';
-                            if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
-                            if ($encryption === 'starttls') { $flags .= '/tls'; }
-                            if (!$validateCert) { $flags .= '/novalidate-cert'; }
-                            $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
-                            $inboxCheck = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, ['DISABLE_AUTHENTICATOR' => 'gssapi']);
-                            if ($inboxCheck) {
-                                $struct = @imap_fetchstructure($inboxCheck, (int)$em['index']);
-                                if ($struct && !empty($struct->parts)) {
-                                    foreach ($struct->parts as $p) {
-                                        $isAttachment = false;
-                                        if (!empty($p->dparameters)) {
-                                            foreach ($p->dparameters as $dp) {
-                                                if (strtolower($dp->attribute) == 'filename') { $isAttachment = true; break; }
-                                            }
-                                        }
-                                        if (!$isAttachment && !empty($p->parameters)) {
-                                            foreach ($p->parameters as $pp) {
-                                                if (strtolower($pp->attribute) == 'name') { $isAttachment = true; break; }
-                                            }
-                                        }
-                                        if ($isAttachment) { $attachmentCount++; }
-                                    }
-                                }
-                                @imap_close($inboxCheck);
-                            }
-                        } catch (Throwable $ign) {}
-                    }
-                 ?>
-                <?php
-                  // Get company and people info for this email
-                  $companyLabel = '';
-                  $peopleLabels = '';
-                  $fromEmail = (string)$em['from'];
-                  $domain = '';
-                  $fromName = '';
-                  
-                  // Extract email address and name
-                  if (preg_match('/<([^>]+)>/', $fromEmail, $mFrom)) {
-                    $fromEmail = strtolower(trim($mFrom[1]));
-                    $fromName = trim(preg_replace('/<[^>]+>/', '', $fromEmail));
-                  } else {
-                    $fromEmail = strtolower(trim($fromEmail));
-                    $fromName = $fromEmail;
-                  }
-                  
-                  // Extract domain from email
-                  if (strpos($fromEmail, '@') !== false) {
-                    $domain = strtolower(trim(substr($fromEmail, strpos($fromEmail, '@') + 1)));
-                  }
-                  
-                  // Check if domain exists in crm_organisations table
-                  if ($domain !== '') {
-                    try {
-                      $compStmt = $db->prepare('SELECT id, name FROM crm_organisations WHERE domain = :domain');
-                      $compStmt->execute([':domain' => $domain]);
-                      $company = $compStmt->fetch();
-                      if ($company) {
-                        $companyId = (int)$company['id'];
-                        $companyName = (string)$company['name'];
-                        $companyLabel = '<a href="dashboard.php?tab=crm&sub=organisations" class="badge bg-success text-decoration-none" title="Company: ' . htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') . '">🏢 ' . htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') . '</a>';
-                      }
-                    } catch (Throwable $ign) {}
-                  }
-                  
-                  // Check if people exist in database by name
-                  if ($fromName !== '') {
-                    try {
-                      $peopleStmt = $db->prepare('SELECT id, name FROM crm_people WHERE name LIKE :name');
-                      $peopleStmt->execute([':name' => '%' . $fromName . '%']);
-                      $people = $peopleStmt->fetchAll();
-                      if ($people) {
-                        foreach ($people as $person) {
-                          $personId = (int)$person['id'];
-                          $personName = (string)$person['name'];
-                          $peopleLabels .= '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary ms-1 text-decoration-none" title="Person: ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '</a>';
-                        }
-                      }
-                    } catch (Throwable $ign) {}
-                  }
-                  
-                  // Also check if people exist by email address
-                  if ($fromEmail !== '') {
-                    try {
-                      $emailPeopleStmt = $db->prepare('SELECT p.id, p.name FROM crm_people p LEFT JOIN crm_emails e ON p.name = e.name WHERE e.email = :email');
-                      $emailPeopleStmt->execute([':email' => $fromEmail]);
-                      $emailPeople = $emailPeopleStmt->fetchAll();
-                      if ($emailPeople) {
-                        foreach ($emailPeople as $person) {
-                          $personId = (int)$person['id'];
-                          $personName = (string)$person['name'];
-                          // Check if this person is already in peopleLabels to avoid duplicates
-                          if (strpos($peopleLabels, $personName) === false) {
-                            $peopleLabels .= '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary ms-1 text-decoration-none" title="Person: ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '">👤 ' . htmlspecialchars($personName, ENT_QUOTES, 'UTF-8') . '</a>';
-                          }
-                        }
-                      }
-                    } catch (Throwable $ign) {}
-                  }
-                ?>
-                <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
-                  <td><?php echo (int)$em['index']; ?></td>
-                  <td>
-                    <?php echo htmlspecialchars((string)$em['from'], ENT_QUOTES, 'UTF-8'); ?>
-                  </td>
-                  <td>
-                    <?php echo htmlspecialchars((string)$em['subject'], ENT_QUOTES, 'UTF-8'); ?>
-                    <?php if ($attachmentCount > 0) { ?>
-                      <span class="badge bg-info ms-2" title="<?php echo $attachmentCount; ?> attachment(s)">
-                        📎 <?php echo $attachmentCount; ?>
-                      </span>
-                    <?php } ?>
-                  </td>
-                  <td><?php echo htmlspecialchars((string)$em['date'], ENT_QUOTES, 'UTF-8'); ?></td>
-                  <td>
-                    <?php if ($companyLabel) { ?>
-                      <div style="margin-bottom: 4px;"><?php echo $companyLabel; ?></div>
-                    <?php } ?>
-                    <?php if ($peopleLabels) { ?>
-                      <div><?php echo $peopleLabels; ?></div>
-                    <?php } ?>
-                    <?php if (!$companyLabel && !$peopleLabels) { ?>
-                      <span style="color: #999; font-size: 12px;">No matches</span>
-                    <?php } ?>
-                  </td>
-                  <td>
-                    <?php 
-                      $currentTime = microtime(true);
-                      $loadTime = round(($currentTime - $pageStartTime) * 1000, 2);
-                      echo '<span style="font-family: monospace; font-size: 11px; color: #666;">' . $loadTime . 'ms</span>';
-                    ?>
-                  </td>
-                </tr>
-              <?php } ?>
-            </tbody>
-          </table>
-        </div>
-      <?php } else if ($imapSupported && !$imapError) { ?>
-        <p class="text-muted">No emails found.</p>
-      <?php } ?>
-      <?php } else if ($sub === 'sent') { ?>
-        <h4>Sent Emails</h4>
-        <?php
-          // Fetch sent emails from email_responses table
-          $sentEmails = [];
           try {
-            $stmt = $db->query('SELECT er.*, m.from_email, m.from_name, m.subject as original_subject 
-                                FROM inbox_sent er 
-                                LEFT JOIN inbox_incoming m ON er.email_id = m.id 
-                                ORDER BY er.sent_at DESC');
-            $sentEmails = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            $stmt = $db->query('SELECT id, from_name, from_email, subject, mail_date, attachments FROM inbox_incoming ORDER BY mail_date DESC LIMIT 50');
+            $emails = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
           } catch (Throwable $e) {
-            echo '<div class="alert alert-danger">Error fetching sent emails: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            echo '<div class="alert alert-danger">Database error: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
           }
         ?>
         
-        <?php if (empty($sentEmails)) { ?>
-          <p class="text-muted">No sent emails found.</p>
-        <?php } else { ?>
+        <?php if (!empty($emails)) { ?>
           <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover email-table">
               <thead>
                 <tr>
-                  <th>ID</th>
-                  <th>To</th>
+                  <th>#</th>
+                  <th>From</th>
                   <th>Subject</th>
-                  <th>Sent Date</th>
-                  <th>Original Email</th>
-                  <th>Actions</th>
+                  <th>Date</th>
+                  <th>Organization</th>
+                  <th>Load Time</th>
                 </tr>
               </thead>
               <tbody>
-                <?php foreach ($sentEmails as $sent) { ?>
-                  <tr>
-                    <td><?php echo (int)$sent['id']; ?></td>
+                <?php foreach ($emails as $email) { 
+                  $viewUrl = 'dashboard.php?tab=inbox&sub=message&id=' . (int)$email['id'];
+                  
+                  // Simple attachment count from database
+                  $attachmentCount = 0;
+                  if (!empty($email['attachments'])) {
+                    $attachmentCount = substr_count($email['attachments'], ',') + 1;
+                  }
+                  
+                  // Simple from display
+                  $fromDisplay = $email['from_name'] ? $email['from_name'] . ' <' . $email['from_email'] . '>' : $email['from_email'];
+                ?>
+                  <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
+                    <td><?php echo (int)$email['id']; ?></td>
+                    <td><?php echo htmlspecialchars($fromDisplay, ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>
-                      <?php 
-                        // Get recipient email from original message
-                        $recipientEmail = (string)($sent['from_email'] ?? 'Unknown');
-                        $recipientName = (string)($sent['from_name'] ?? '');
-                        if ($recipientName && $recipientName !== $recipientEmail) {
-                          echo htmlspecialchars($recipientName, ENT_QUOTES, 'UTF-8') . ' &lt;' . htmlspecialchars($recipientEmail, ENT_QUOTES, 'UTF-8') . '&gt;';
-                        } else {
-                          echo htmlspecialchars($recipientEmail, ENT_QUOTES, 'UTF-8');
-                        }
-                      ?>
-                    </td>
-                    <td><?php echo htmlspecialchars((string)$sent['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td><?php echo htmlspecialchars((string)$sent['sent_at'], ENT_QUOTES, 'UTF-8'); ?></td>
-                    <td>
-                      <?php if ($sent['original_subject']) { ?>
-                        <small class="text-muted">Re: <?php echo htmlspecialchars((string)$sent['original_subject'], ENT_QUOTES, 'UTF-8'); ?></small>
-                      <?php } else { ?>
-                        <small class="text-muted">Original email not found</small>
+                      <?php echo htmlspecialchars((string)$email['subject'], ENT_QUOTES, 'UTF-8'); ?>
+                      <?php if ($attachmentCount > 0) { ?>
+                        <span class="badge bg-info ms-2" title="<?php echo $attachmentCount; ?> attachment(s)">
+                          📎 <?php echo $attachmentCount; ?>
+                        </span>
                       <?php } ?>
                     </td>
+                    <td><?php echo htmlspecialchars((string)$email['mail_date'], ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>
-                      <button class="btn btn-sm btn-outline-primary" onclick="showSentEmailDetails(<?php echo (int)$sent['id']; ?>)">
-                        View Details
-                      </button>
+                      <span style="color: #999; font-size: 12px;">No matches</span>
                     </td>
-                  </tr>
-                  <tr id="sent-details-<?php echo (int)$sent['id']; ?>" style="display: none;">
-                    <td colspan="6">
-                      <div class="p-3 bg-light border rounded">
-                        <h6>Email Content:</h6>
-                        <div class="mb-3">
-                          <strong>Subject:</strong> <?php echo htmlspecialchars((string)$sent['subject'], ENT_QUOTES, 'UTF-8'); ?>
-                        </div>
-                        <div class="mb-3">
-                          <strong>Body:</strong>
-                          <div class="p-2 bg-white border rounded" style="max-height: 200px; overflow-y: auto;">
-                            <?php echo nl2br(htmlspecialchars((string)$sent['body'], ENT_QUOTES, 'UTF-8')); ?>
-                          </div>
-                        </div>
-                        <div>
-                          <strong>Sent:</strong> <?php echo htmlspecialchars((string)$sent['sent_at'], ENT_QUOTES, 'UTF-8'); ?>
-                        </div>
-                      </div>
+                    <td>
+                      <?php 
+                        $currentTime = microtime(true);
+                        $loadTime = round(($currentTime - $pageStartTime) * 1000, 2);
+                        echo '<span style="font-family: monospace; font-size: 11px; color: #666;">' . $loadTime . 'ms</span>';
+                      ?>
                     </td>
                   </tr>
                 <?php } ?>
               </tbody>
             </table>
           </div>
-          
-          <script>
-          function showSentEmailDetails(id) {
-            const detailsRow = document.getElementById('sent-details-' + id);
-            if (detailsRow.style.display === 'none') {
-              detailsRow.style.display = 'table-row';
-            } else {
-              detailsRow.style.display = 'none';
-            }
-          }
-          </script>
+        <?php } else { ?>
+          <p class="text-muted">No emails found in database.</p>
         <?php } ?>
-      <?php } else if ($sub === 'settings') { 
-        include __DIR__ . '/tab_inbox_settings.php';
-      } else if ($sub === 'message') { ?>
-        <?php include __DIR__ . '/tab_inbox_message.php'; ?>
-      <?php } ?>
+        
+        <?php } else if ($sub === 'sent') { ?>
+          <h4>Sent Emails</h4>
+          <?php
+            // Fetch sent emails from inbox_sent table
+            $sentEmails = [];
+            try {
+              $stmt = $db->query('SELECT er.*, m.from_email, m.from_name, m.subject as original_subject 
+                                  FROM inbox_sent er 
+                                  LEFT JOIN inbox_incoming m ON er.email_id = m.id 
+                                  ORDER BY er.sent_at DESC');
+              $sentEmails = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            } catch (Throwable $e) {
+              echo '<div class="alert alert-danger">Error fetching sent emails: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+          ?>
+          
+          <?php if (empty($sentEmails)) { ?>
+            <p class="text-muted">No sent emails found.</p>
+          <?php } else { ?>
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>To</th>
+                    <th>Subject</th>
+                    <th>Sent Date</th>
+                    <th>Original Email</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($sentEmails as $sent) { ?>
+                    <tr>
+                      <td><?php echo (int)$sent['id']; ?></td>
+                      <td>
+                        <?php 
+                          // Get recipient email from original message
+                          $recipientEmail = (string)($sent['from_email'] ?? 'Unknown');
+                          $recipientName = (string)($sent['from_name'] ?? '');
+                          if ($recipientName && $recipientName !== $recipientEmail) {
+                            echo htmlspecialchars($recipientName, ENT_QUOTES, 'UTF-8') . ' &lt;' . htmlspecialchars($recipientEmail, ENT_QUOTES, 'UTF-8') . '&gt;';
+                          } else {
+                            echo htmlspecialchars($recipientEmail, ENT_QUOTES, 'UTF-8');
+                          }
+                        ?>
+                      </td>
+                      <td><?php echo htmlspecialchars((string)$sent['subject'], ENT_QUOTES, 'UTF-8'); ?></td>
+                      <td><?php echo htmlspecialchars((string)$sent['sent_at'], ENT_QUOTES, 'UTF-8'); ?></td>
+                      <td>
+                        <?php if ($sent['original_subject']) { ?>
+                          <small class="text-muted">Re: <?php echo htmlspecialchars((string)$sent['original_subject'], ENT_QUOTES, 'UTF-8'); ?></small>
+                        <?php } else { ?>
+                          <small class="text-muted">Original email not found</small>
+                        <?php } ?>
+                      </td>
+                      <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="showSentEmailDetails(<?php echo (int)$sent['id']; ?>)">
+                          View Details
+                        </button>
+                      </td>
+                    </tr>
+                    <tr id="sent-details-<?php echo (int)$sent['id']; ?>" style="display: none;">
+                      <td colspan="6">
+                        <div class="p-3 bg-light border rounded">
+                          <h6>Email Content:</h6>
+                          <div class="mb-3">
+                            <strong>Subject:</strong> <?php echo htmlspecialchars((string)$sent['subject'], ENT_QUOTES, 'UTF-8'); ?>
+                          </div>
+                          <div class="mb-3">
+                            <strong>Body:</strong>
+                            <div class="p-2 bg-white border rounded" style="max-height: 200px; overflow-y: auto;">
+                              <?php echo nl2br(htmlspecialchars((string)$sent['body'], ENT_QUOTES, 'UTF-8')); ?>
+                            </div>
+                          </div>
+                          <div>
+                            <strong>Sent:</strong> <?php echo htmlspecialchars((string)$sent['sent_at'], ENT_QUOTES, 'UTF-8'); ?>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  <?php } ?>
+                </tbody>
+              </table>
+            </div>
+            
+            <script>
+            function showSentEmailDetails(id) {
+              const detailsRow = document.getElementById('sent-details-' + id);
+              if (detailsRow.style.display === 'none') {
+                detailsRow.style.display = 'table-row';
+              } else {
+                detailsRow.style.display = 'none';
+              }
+            }
+            </script>
+          <?php } ?>
+        <?php } else if ($sub === 'settings') { 
+          include __DIR__ . '/tab_inbox_settings.php';
+        } else if ($sub === 'message') { ?>
+          <?php include __DIR__ . '/tab_inbox_message.php'; ?>
+        <?php } ?>
       </div>
     </div>
   </div>
