@@ -30,6 +30,22 @@ try {
     $db = getDatabaseConnection();
     echo "Database connected\n";
     
+    // Check if inbox_incoming table exists and show structure
+    $stmt = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='inbox_incoming'");
+    $tableExists = $stmt->fetch();
+    if ($tableExists) {
+        echo "inbox_incoming table exists\n";
+        $stmt = $db->query("PRAGMA table_info(inbox_incoming)");
+        $columns = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        echo "Table columns: ";
+        foreach ($columns as $column) {
+            echo $column['name'] . " ";
+        }
+        echo "\n";
+    } else {
+        echo "WARNING: inbox_incoming table does not exist!\n";
+    }
+    
     $cfg = [];
     $cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
     if (is_file($cfgFile)) { 
@@ -91,6 +107,17 @@ try {
     }
     echo "Existing messages in DB: " . count($existingIds) . "\n";
     
+    // Show some existing message IDs for debugging
+    if (count($existingIds) > 0) {
+        echo "Sample existing message IDs:\n";
+        $count = 0;
+        foreach ($existingIds as $id => $val) {
+            echo "  - $id\n";
+            $count++;
+            if ($count >= 3) break;
+        }
+    }
+    
     // Process first 3 messages for testing
     $newEmailsCount = 0;
     $maxMessages = min($messageCount, 3);
@@ -103,9 +130,15 @@ try {
         
         echo "Message ID: $messageId\n";
         
+        // Check if message ID is empty
+        if (empty($messageId)) {
+            echo "WARNING: Message ID is empty for message $i\n";
+            continue;
+        }
+        
         // Skip if already exists
         if (isset($existingIds[$messageId])) {
-            echo "Message already exists, skipping\n";
+            echo "Message already exists in database, skipping\n";
             continue;
         }
         
