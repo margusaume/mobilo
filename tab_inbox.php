@@ -15,6 +15,13 @@ $pageStartTime = microtime(true);
       <div class="card-body">
         <!-- INBOX Navigation -->
         <ul class="nav nav-pills mb-4">
+          <?php if (($sub === '' || $sub === 'list')) { ?>
+          <li class="nav-item">
+            <button class="btn btn-outline-primary btn-sm me-2" id="refreshInboxBtn" title="Refresh inbox from IMAP">
+              <i class="fas fa-sync-alt" id="refreshIcon"></i> Refresh
+            </button>
+          </li>
+          <?php } ?>
           <li class="nav-item">
             <a class="nav-link <?php echo ($_GET['sub'] ?? '') === '' || ($_GET['sub'] ?? '') === 'list' ? 'active' : ''; ?>" href="dashboard.php?tab=inbox&sub=list">List</a>
           </li>
@@ -107,3 +114,72 @@ $pageStartTime = microtime(true);
     </div>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const refreshBtn = document.getElementById('refreshInboxBtn');
+    const refreshIcon = document.getElementById('refreshIcon');
+    
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            // Disable button and show loading
+            refreshBtn.disabled = true;
+            refreshIcon.classList.add('fa-spin');
+            refreshBtn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Syncing...';
+            
+            // Make AJAX request to sync IMAP
+            fetch('dashboard.php?tab=inbox&action=sync_imap', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'sync_imap=1'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showAlert('success', `Successfully synced ${data.new_emails} new emails`);
+                    // Refresh the page to show new emails
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                } else {
+                    showAlert('danger', 'Error syncing emails: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('danger', 'Error syncing emails: ' + error.message);
+            })
+            .finally(() => {
+                // Re-enable button
+                refreshBtn.disabled = false;
+                refreshIcon.classList.remove('fa-spin');
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
+            });
+        });
+    }
+    
+    function showAlert(type, message) {
+        // Create alert element
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        // Insert at top of card body
+        const cardBody = document.querySelector('.card-body');
+        cardBody.insertBefore(alertDiv, cardBody.firstChild);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+});
+</script>

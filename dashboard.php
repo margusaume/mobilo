@@ -235,6 +235,126 @@ try {
 				$flashError = 'Please fill in both subject and message.';
 			}
 		}
+		
+		// Handle IMAP sync
+		if (isset($_POST['sync_imap']) && $_POST['sync_imap'] === '1') {
+			// Return JSON response for AJAX
+			header('Content-Type: application/json');
+			
+			try {
+				// Check if IMAP extension is available
+				if (!extension_loaded('imap')) {
+					throw new Exception('IMAP extension is not installed on this server');
+				}
+				$cfg = [];
+				$cfgFile = __DIR__ . DIRECTORY_SEPARATOR . 'config.local.php';
+				if (is_file($cfgFile)) { 
+					$cfg = require $cfgFile; 
+				}
+				
+				$imapCfg = $cfg['imap'] ?? [];
+				$host = (string)($imapCfg['host'] ?? '');
+				$port = (int)($imapCfg['port'] ?? 993);
+				$username = (string)($imapCfg['username'] ?? '');
+				$password = (string)($imapCfg['password'] ?? '');
+				$encryption = (string)($imapCfg['encryption'] ?? 'ssl');
+				
+				if (empty($host) || empty($username) || empty($password)) {
+					throw new Exception('IMAP configuration missing');
+				}
+				
+				// Connect to IMAP
+				$connectionString = "{{$host}:{$port}/imap/{$encryption}/novalidate-cert}INBOX";
+				$inbox = imap_open($connectionString, $username, $password);
+				
+				if (!$inbox) {
+					throw new Exception('Failed to connect to IMAP server: ' . imap_last_error());
+				}
+				
+				// Get message count
+				$messageCount = imap_num_msg($inbox);
+				$newEmailsCount = 0;
+				
+				// Get existing message IDs from database
+				$existingIds = [];
+				$stmt = $db->query('SELECT message_id FROM inbox_incoming');
+				while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+					$existingIds[$row['message_id']] = true;
+				}
+				
+				// Process new messages
+				for ($i = 1; $i <= $messageCount; $i++) {
+					$header = imap_headerinfo($inbox, $i);
+					$messageId = $header->message_id ?? '';
+					
+					// Skip if already exists
+					if (isset($existingIds[$messageId])) {
+						continue;
+					}
+					
+					// Extract email details
+					$from = $header->from[0] ?? null;
+					$fromEmail = $from ? $from->mailbox . '@' . $from->host : '';
+					$fromName = $from ? ($from->personal ?? '') : '';
+					$subject = $header->subject ?? '';
+					$date = $header->date ?? '';
+					
+					// Get email body and attachments
+					$body = imap_fetchbody($inbox, $i, 1);
+					$structure = imap_fetchstructure($inbox, $i);
+					$attachments = [];
+					
+					// Process attachments
+					if (isset($structure->parts) && is_array($structure->parts)) {
+						foreach ($structure->parts as $partNum => $part) {
+							if (isset($part->disposition) && strtolower($part->disposition) === 'attachment') {
+								$filename = '';
+								if (isset($part->dparameters) && is_array($part->dparameters)) {
+									foreach ($part->dparameters as $param) {
+										if (strtolower($param->attribute) === 'filename') {
+											$filename = $param->value;
+											break;
+										}
+									}
+								}
+								if ($filename) {
+									$attachments[] = $filename;
+								}
+							}
+						}
+					}
+					
+					// Save to database
+					$stmt = $db->prepare('INSERT INTO inbox_incoming (message_id, from_email, from_name, subject, date, content_plain, attachments) VALUES (?, ?, ?, ?, ?, ?, ?)');
+					$stmt->execute([
+						$messageId,
+						$fromEmail,
+						$fromName,
+						$subject,
+						$date,
+						$body,
+						json_encode($attachments)
+					]);
+					
+					$newEmailsCount++;
+				}
+				
+				imap_close($inbox);
+				
+				echo json_encode([
+					'success' => true,
+					'new_emails' => $newEmailsCount,
+					'message' => "Successfully synced {$newEmailsCount} new emails"
+				]);
+				
+			} catch (Exception $e) {
+				echo json_encode([
+					'success' => false,
+					'error' => $e->getMessage()
+				]);
+			}
+			exit;
+		}
 	}
 
 	// Fetch for Users tab (existing overview)
