@@ -233,7 +233,7 @@ declare(strict_types=1);
   <?php } ?>
   
   <?php } else if ($sub === 'crm_people') { 
-    include __DIR__ . '/tab_crm_crm_people.php';
+    include __DIR__ . '/tab_crm_people.php';
   ?>
   <?php } else if ($sub === 'organisations') { 
     // Handle POST requests for company updates

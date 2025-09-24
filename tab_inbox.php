@@ -73,6 +73,30 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
                   
                   // Simple from display
                   $fromDisplay = $email['from_name'] ? $email['from_name'] . ' <' . $email['from_email'] . '>' : $email['from_email'];
+                  
+                  // Organization matching
+                  $organizationLabels = [];
+                  
+                  // 1) Check if sender email is in crm_people table
+                  $peopleStmt = $db->prepare('SELECT name FROM crm_people WHERE email = ?');
+                  $peopleStmt->execute([$email['from_email']]);
+                  $peopleMatches = $peopleStmt->fetchAll(PDO::FETCH_ASSOC);
+                  
+                  foreach ($peopleMatches as $person) {
+                    $organizationLabels[] = '<a href="dashboard.php?tab=crm&sub=people" class="badge bg-primary text-decoration-none">👤 ' . htmlspecialchars($person['name'], ENT_QUOTES, 'UTF-8') . '</a>';
+                  }
+                  
+                  // 2) Check if sender email domain is in crm_organisations table
+                  $domain = substr(strrchr($email['from_email'], '@'), 1);
+                  if ($domain) {
+                    $orgStmt = $db->prepare('SELECT name FROM crm_organisations WHERE name = ?');
+                    $orgStmt->execute([$domain]);
+                    $orgMatches = $orgStmt->fetchAll(PDO::FETCH_ASSOC);
+                    
+                    foreach ($orgMatches as $org) {
+                      $organizationLabels[] = '<a href="dashboard.php?tab=crm&sub=organisations" class="badge bg-success text-decoration-none">🏢 ' . htmlspecialchars($org['name'], ENT_QUOTES, 'UTF-8') . '</a>';
+                    }
+                  }
                 ?>
                   <tr style="cursor: pointer;" onclick="window.location.href='<?php echo $viewUrl; ?>'">
                     <td><?php echo (int)$email['id']; ?></td>
@@ -87,7 +111,11 @@ $sub = isset($_GET['sub']) ? (string)$_GET['sub'] : 'list';
                     </td>
                     <td><?php echo htmlspecialchars((string)$email['mail_date'], ENT_QUOTES, 'UTF-8'); ?></td>
                     <td>
-                      <span style="color: #999; font-size: 12px;">No matches</span>
+                      <?php if (!empty($organizationLabels)) { ?>
+                        <?php echo implode(' ', $organizationLabels); ?>
+                      <?php } else { ?>
+                        <span style="color: #999; font-size: 12px;">No matches</span>
+                      <?php } ?>
                     </td>
                     <td>
                       <?php 
