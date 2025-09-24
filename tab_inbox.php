@@ -169,9 +169,8 @@ $pageStartTime = microtime(true);
               <?php 
               $viewIdx = isset($_GET['view_idx']) ? (int)$_GET['view_idx'] : 0;
               foreach ($emails as $em) {
-                    // use row index for view
-                    $viewUrl = 'dashboard.php?tab=inbox&sub=list&view_idx=' . urlencode((string)$em['index']);
-                    $isSelected = $viewIdx === (int)$em['index'];
+                    // use row index for view - navigate to message page
+                    $viewUrl = 'dashboard.php?tab=inbox&sub=message&id=' . urlencode((string)$em['index']);
                     
                     // Check for attachments in this email
                     $attachmentCount = 0;
@@ -310,153 +309,6 @@ $pageStartTime = microtime(true);
                     ?>
                   </td>
                 </tr>
-                <?php if ($isSelected) { ?>
-                  <tr>
-                    <td colspan="6" style="padding: 0; border: none;">
-                      <div class="message-detail mt-2 p-3" style="background-color: #f8f9fa; border-left: 4px solid #0d6efd;">
-                        <?php
-                          // Fetch email detail for selected row
-                          $detail = null; $attachments = [];
-                          if ($host && $usernameCfg && $passwordCfg) {
-                              $flags = '/imap';
-                              if ($encryption === 'ssl' || $encryption === 'tls') { $flags .= '/ssl'; }
-                              if ($encryption === 'starttls') { $flags .= '/tls'; }
-                              if (!$validateCert) { $flags .= '/novalidate-cert'; }
-                              $mailbox = sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
-                              $inbox2 = @imap_open($mailbox, $usernameCfg, $passwordCfg, 0, 1, ['DISABLE_AUTHENTICATOR' => 'gssapi']);
-                              if ($inbox2) {
-                                  $msgNo = $viewIdx;
-                                  $hdr = imap_headerinfo($inbox2, $msgNo);
-                                  $struct = @imap_fetchstructure($inbox2, $msgNo);
-                                  // helper to get body
-                                  $get_part = function($mbox, $msgno, $p, $partno) use (&$attachments) {
-                                      $data = '';
-                                      if ($p->type == TYPETEXT && ($p->subtype == 'PLAIN' || $p->subtype == 'HTML')) {
-                                          $data = @imap_fetchbody($mbox, $msgno, $partno);
-                                          if ($p->encoding == ENCBASE64) $data = base64_decode($data);
-                                          elseif ($p->encoding == ENCQUOTEDPRINTABLE) $data = quoted_printable_decode($data);
-                                      }
-                                      // attachments
-                                      $isAttachment = false; $filename = '';
-                                      if (!empty($p->dparameters)) {
-                                          foreach ($p->dparameters as $dp) {
-                                              if (strtolower($dp->attribute) == 'filename') { $isAttachment = true; $filename = (string)$dp->value; }
-                                          }
-                                      }
-                                      if (!empty($p->parameters)) {
-                                          foreach ($p->parameters as $pp) {
-                                              if (strtolower($pp->attribute) == 'name') { $isAttachment = true; if ($filename==='') $filename = (string)$pp->value; }
-                                          }
-                                      }
-                                      if ($isAttachment) {
-                                          $attachments[] = [ 'part' => $partno, 'filename' => $filename ];
-                                      }
-                                      return $data;
-                                  };
-                                  $plain = ''; $html = '';
-                                  if ($struct && !empty($struct->parts)) {
-                                      $pno = 1;
-                                      foreach ($struct->parts as $ix => $p) {
-                                          $partno = (string)($ix+1);
-                                          $content = $get_part($inbox2, $msgNo, $p, $partno);
-                                          if ($p->type == TYPETEXT && $p->subtype == 'PLAIN' && $content !== '') { $plain .= $content; }
-                                          if ($p->type == TYPETEXT && $p->subtype == 'HTML' && $content !== '') { $html .= $content; }
-                                      }
-                                  } else {
-                                      $raw = @imap_body($inbox2, $msgNo);
-                                      $plain = quoted_printable_decode($raw);
-                                  }
-                                  $detail = [
-                                      'from' => isset($hdr->fromaddress) ? (string)$hdr->fromaddress : '',
-                                      'subject' => isset($hdr->subject) ? (string)imap_utf8($hdr->subject) : '',
-                                      'date' => isset($hdr->date) ? (string)$hdr->date : '',
-                                      'plain' => $plain,
-                                      'html' => $html,
-                                      'attachments' => $attachments,
-                                  ];
-                                  @imap_close($inbox2);
-                              }
-                          }
-                        ?>
-                        <?php if (!empty($detail)) { ?>
-                          <div class="mb-3">
-                            <strong>Content:</strong>
-                            <div class="message-content p-3 mt-2" style="background-color: white; border: 1px solid #dee2e6; border-radius: 6px; max-height: 300px; overflow-y: auto;">
-                              <?php
-                                if ($detail['html'] !== '') {
-                                    // show HTML as escaped preview
-                                    echo nl2br(htmlspecialchars($detail['html'], ENT_QUOTES, 'UTF-8'));
-                                } else {
-                                    echo nl2br(htmlspecialchars($detail['plain'], ENT_QUOTES, 'UTF-8'));
-                                }
-                              ?>
-                            </div>
-                          </div>
-                          <?php if (!empty($detail['attachments'])) { ?>
-                            <div class="mb-3">
-                              <strong>Attachments:</strong>
-                              <ul class="list-unstyled">
-                                <?php foreach ($detail['attachments'] as $att) { ?>
-                                  <li><span class="badge bg-secondary"><?php echo htmlspecialchars((string)$att['filename'], ENT_QUOTES, 'UTF-8'); ?></span></li>
-                                <?php } ?>
-                              </ul>
-                            </div>
-                          <?php } ?>
-                          <div class="mt-3">
-                            <div class="accordion" id="replyAccordion">
-                              <div class="accordion-item">
-                                <h2 class="accordion-header">
-                                  <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#replyCollapse" aria-expanded="false" aria-controls="replyCollapse">
-                                    Reply
-                                  </button>
-                                </h2>
-                                <div id="replyCollapse" class="accordion-collapse collapse" data-bs-parent="#replyAccordion">
-                                  <div class="accordion-body">
-                                    <?php
-                                      // Find/create contact id by from email
-                                      $fromAddr = (string)$detail['from'];
-                                      $fromEmailOnly = $fromAddr;
-                                      if (preg_match('/<([^>]+)>/', $fromAddr, $mfe)) { $fromEmailOnly = strtolower(trim($mfe[1])); }
-                                      $contactId = null;
-                                      if ($fromEmailOnly !== '') {
-                                          try {
-                                              $db->prepare('INSERT OR IGNORE INTO emails (email, name, created_at) VALUES (:e,:n,:t)')
-                                                 ->execute([':e'=>$fromEmailOnly, ':n'=>null, ':t'=>(new DateTimeImmutable())->format(DateTimeInterface::ATOM)]);
-                                              $stC = $db->prepare('SELECT id FROM emails WHERE email = :e');
-                                              $stC->execute([':e'=>$fromEmailOnly]);
-                                              $rC = $stC->fetch();
-                                              if ($rC) { $contactId = (int)$rC['id']; }
-                                          } catch (Throwable $ign) {}
-                                      }
-                                    ?>
-                                    <?php if ($contactId) { ?>
-                                      <div class="mb-3">
-                                        <strong>Reply to:</strong> <?php echo htmlspecialchars($fromEmailOnly, ENT_QUOTES, 'UTF-8'); ?>
-                                      </div>
-                                      <form action="dashboard.php?tab=inbox&sub=list&view_idx=<?php echo urlencode((string)$viewIdx); ?>" method="post">
-                                        <input type="hidden" name="action" value="reply" />
-                                        <input type="hidden" name="email_id" value="<?php echo (int)$contactId; ?>" />
-                                        <div class="mb-3">
-                                          <label for="reply_subject" class="form-label">Subject</label>
-                                          <input type="text" name="subject" id="reply_subject" class="form-control" placeholder="Subject" required />
-                                        </div>
-                                        <div class="mb-3">
-                                          <label for="reply_body" class="form-label">Message</label>
-                                          <textarea name="body" id="reply_body" rows="6" class="form-control" placeholder="Your reply..." required></textarea>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">Send & Save</button>
-                                      </form>
-                                    <?php } else { echo '<p class="text-muted">No contact email found to reply.</p>'; } ?>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        <?php } ?>
-                      </div>
-                    </td>
-                  </tr>
-                <?php } ?>
               <?php } ?>
             </tbody>
           </table>
@@ -493,6 +345,8 @@ $pageStartTime = microtime(true);
             </div>
           </div>
         </div>
+      <?php } else if ($sub === 'message') { ?>
+        <?php include __DIR__ . '/tab_inbox_message.php'; ?>
       <?php } ?>
       </div>
     </div>
