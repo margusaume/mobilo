@@ -5,11 +5,17 @@
  * URL: https://yourdomain.com/temp/setup_database.php
  */
 
-// Database configuration
+// Database configuration - UPDATE THESE VALUES
 $host = 'localhost';
-$dbname = 'your_database_name'; // Change this to your actual database name
-$username = 'your_username';     // Change this to your actual username
-$password = 'your_password';     // Change this to your actual password
+$dbname = 'mobilo_db';           // ← Change to your database name
+$username = 'mobilo_user';       // ← Change to your database username  
+$password = 'your_secure_password'; // ← Change to your database password
+
+// Common Cloudways database settings:
+// Host: localhost (or your server IP)
+// Database: usually something like 'virt86672_mobilo' 
+// Username: usually something like 'virt86672_mobilo'
+// Password: the one you set when creating the database
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
@@ -176,11 +182,35 @@ try {
 } catch (PDOException $e) {
     echo "<h1>❌ Database Setup Failed</h1>";
     echo "<p><strong>Error:</strong> " . $e->getMessage() . "</p>";
-    echo "<p><strong>Please check:</strong></p>";
+    
+    echo "<h2>🔧 How to Fix This:</h2>";
+    echo "<ol>";
+    echo "<li><strong>Edit this file</strong> (temp/setup_database.php)</li>";
+    echo "<li><strong>Update the database credentials</strong> at the top of the file:</li>";
+    echo "</ol>";
+    
+    echo "<div style='background: #f8f9fa; padding: 15px; border-left: 4px solid #007bff; margin: 10px 0;'>";
+    echo "<strong>Current values (WRONG):</strong><br>";
+    echo "Host: <code>$host</code><br>";
+    echo "Database: <code>$dbname</code><br>";
+    echo "Username: <code>$username</code><br>";
+    echo "Password: <code>$password</code><br>";
+    echo "</div>";
+    
+    echo "<div style='background: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 10px 0;'>";
+    echo "<strong>You need to change them to your actual values:</strong><br>";
+    echo "• Go to your Cloudways panel<br>";
+    echo "• Find your database credentials<br>";
+    echo "• Update the 4 values in this file<br>";
+    echo "• Save and refresh this page<br>";
+    echo "</div>";
+    
+    echo "<p><strong>Common Cloudways format:</strong></p>";
     echo "<ul>";
-    echo "<li>Database credentials are correct</li>";
-    echo "<li>Database exists</li>";
-    echo "<li>User has proper permissions</li>";
+    echo "<li>Database: <code>virt86672_mobilo</code> (or similar)</li>";
+    echo "<li>Username: <code>virt86672_mobilo</code> (or similar)</li>";
+    echo "<li>Password: <code>your_actual_password</code></li>";
+    echo "<li>Host: <code>localhost</code> (usually)</li>";
     echo "</ul>";
 }
 ?>
