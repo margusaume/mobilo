@@ -12,28 +12,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Deploy to Cloudways
+        uses: RafinBiswas/cloudways-api-action@stable
         with:
-          fetch-depth: 0
-
-      - name: Build dist folder
-        run: |
-          mkdir -p dist
-          rsync -r --exclude 'dist' --exclude '.git' --exclude '.github' --exclude '.gitignore' . dist
-
-      - name: Deploy with rsync
-        env:
-          remote_host: ${{ secrets.CLOUDWAYS_HOST }}
-          remote_port: "22"
-          remote_user: ${{ secrets.CLOUDWAYS_USER }}
-          remote_key: ${{ secrets.CLOUDWAYS_SSH_PRIVATE_KEY }}
-          local_dir: "dist/"
-          remote_dir: "/public_html/"
-        run: |
-          mkdir -p ~/.ssh
-          echo "$remote_key" > ~/.ssh/gh_actions_key
-          chmod 600 ~/.ssh/gh_actions_key
-          rsync -avzr -e "ssh -p ${remote_port} -i ~/.ssh/gh_actions_key -o StrictHostKeyChecking=no" ${local_dir} ${remote_user}@${remote_host}:${remote_dir}
-          echo "Deployment completed successfully!"
+          email: ${{ secrets.CLOUDWAYS_EMAIL }}
+          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
+          api-version: "v1"
+          api-path: "/git/pull"
+          request-method: "POST"
+          request-body: |
+            server_id:${{ secrets.CLOUDWAYS_SERVER_ID }}
+            git_url:${{ secrets.CLOUDWAYS_GIT_URL }}
+            branch:main
+          token-required: "false"
+          request-response: |
+            data.status:success
+          prefix: "cw_"
 
       - name: Verify deployment
         run: |
