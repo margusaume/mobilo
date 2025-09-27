@@ -1,55 +1,33 @@
-name: Deploy to Cloudways
-
+name: deploy
 on:
   push:
     branches:
-      - main
-
+      - master
 jobs:
-  deploy:
+  new-version-release:
     runs-on: ubuntu-latest
-    
+ 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Get Cloudways Access Token
-        uses: RafinBiswas/cloudways-api-action@stable
+ 
+      - uses: actions/checkout@v2
         with:
-          email: ${{ secrets.CLOUDWAYS_EMAIL }}
-          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
-          api-version: "v1"
-          api-path: "/oauth/access_token"
-          request-method: "POST"
-          request-body: |
-            email:${{ secrets.CLOUDWAYS_EMAIL }}
-            api_key:${{ secrets.CLOUDWAYS_API_KEY }}
-          token-required: "false"
-          request-response: |
-            access_token:token
-          prefix: "cw_token_"
-
-      - name: Deploy to Cloudways
-        uses: RafinBiswas/cloudways-api-action@stable
-        with:
-          email: ${{ secrets.CLOUDWAYS_EMAIL }}
-          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
-          api-version: "v1"
-          api-path: "/git/pull"
-          request-method: "POST"
-          request-body: |
-            server_id:${{ secrets.CLOUDWAYS_SERVER_ID }}
-            git_url:${{ secrets.CLOUDWAYS_GIT_URL }}
-            branch:main
-          token-required: "true"
-          access-token: ${{ env.cw_token_access_token }}
-          request-response: |
-            data.status:success
-          prefix: "cw_deploy_"
-
-      - name: Verify deployment
+          fetch-depth: 0
+ 
+      - name: Build dist folder
         run: |
-          echo "✅ Deployment to Cloudways completed!"
-          echo "Repository: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
+          mkdir -p dist
+          rsync -r --exclude 'dist' --exclude '.git' --exclude '.github' --exclude '.gitignore' . dist
+ 
+      - name: Deploy with rsync
+        env:
+          remote_host: ${{ secrets.CLOUDWAYS_HOST }}
+          remote_port: "22"
+          remote_user: ${{ secrets.CLOUDWAYS_USER }}
+          remote_key: ${{ secrets.CLOUDWAYS_API_KEY }}
+          local_dir: "dist/"
+          remote_dir: ${{ secrets.CLOUDWAYS_APP_PATH }}
+        run: |
+          mkdir ~/.ssh
+          echo "$remote_key" > ~/.ssh/gh_actions_key
+          chmod 600 ~/.ssh/gh_actions_key
+          rsync -avzr -e "ssh -p ${remote_port} -i ~/.ssh/gh_actions_key -o StrictHostKeyChecking=no" ${local_dir} ${remote_user}@${remote_host}:${remote_dir}
