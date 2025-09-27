@@ -1,0 +1,23 @@
+name: Deploy to Zone
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://testcursor.mobilo.shop
+    steps:
+      - name: Checkout to main
+        uses: actions/checkout@main
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh/
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HOST_SERVER_IP }} >> ~/.ssh/known_hosts
+      - name: Copy files to server
+        run: |
+          rsync -vrm  ./* ${{ secrets.SSH_LOGIN_CREDS }}:/data01/virt86672/domeenid/www.mobilo.shop/htdocs/actions
