@@ -1,23 +1,64 @@
-name: Deploy to Zone
+name: Cloudways API Execute Via Git Action
+
 on:
   push:
     branches:
-      - main
+      - 'feature-**'
+      - 'feature/**'
+  pull_request:
+    branches:
+      - 'main'
+      - 'stage'
+    types:
+      - closed
+
 jobs:
-  deploy:
+  cloudways-deployment:
+    name: Cloudways Deployment
+
     runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: https://testcursor.MOBILO.SHOP
+
     steps:
-      - name: Checkout to main
-        uses: actions/checkout@main
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh/
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HOST_SERVER_IP }} >> ~/.ssh/known_hosts
-      - name: Copy files to server
-        run: |
-          rsync -vrm  ./* ${{ secrets.SSH_LOGIN_CREDS }}:/data01/virt86672/domeenid/www.mobilo.shop/test
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Cloudways API Git Action
+        uses: RafinBiswas/cloudways-api-action@stable
+        with:
+          email: ${{ secrets.CLOUDWAYS_EMAIL }}
+          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
+          api-version: ${{ secrets.CLOUDWAYS_API_VERSION }}
+          api-path: ${{ secrets.CLOUDWAYS_API_PATH }}
+          request-method: ${{ secrets.CLOUDWAYS_REQUEST_METHOD }}
+          request-body: |
+            ${{ secrets.CLOUDWAYS_REQUEST_BODY }}
+          token-required: ${{ secrets.CLOUDWAYS_TOKEN_REQUIRED }}
+          request-response: |
+            ${{ secrets.CLOUDWAYS_REQUEST_RESPONSE }}
+          prefix: ${{ secrets.CLOUDWAYS_PREFIX }}
+
+      - name: Get Cloudways Server SFTP Whitelisted IPs
+        uses: RafinBiswas/cloudways-api-action@stable
+        with:
+          email: ${{ secrets.CLOUDWAYS_EMAIL }}
+          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
+          api-path: "/security/whitelisted"
+          request-method: "GET"
+          request-body: |
+            server_id:${{ secrets.CLOUDWAYS_SERVER_ID }}
+          request-response: |
+            data.ip_list:[]
+          prefix: "cwsl_"
+
+      - name: Set Cloudways Server SFTP Whitelisted IPs
+        uses: RafinBiswas/cloudways-api-action@stable
+        with:
+          email: ${{ secrets.CLOUDWAYS_EMAIL }}
+          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
+          api-path: "/security/whitelisted"
+          request-body: |
+            server_id:${{ secrets.CLOUDWAYS_SERVER_ID }}
+            tab:sftp
+            ip:${{ env.cwsl_data_ip_list }}
+            type:sftp
+            ipPolicy:block_all
