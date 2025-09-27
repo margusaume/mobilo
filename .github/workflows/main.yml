@@ -14,22 +14,6 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v2
 
-      - name: Get Cloudways Access Token
-        uses: RafinBiswas/cloudways-api-action@stable
-        with:
-          email: ${{ secrets.CLOUDWAYS_EMAIL }}
-          api-key: ${{ secrets.CLOUDWAYS_API_KEY }}
-          api-version: "v1"
-          api-path: "/oauth/access_token"
-          request-method: "POST"
-          request-body: |
-            email:${{ secrets.CLOUDWAYS_EMAIL }}
-            api_key:${{ secrets.CLOUDWAYS_API_KEY }}
-          token-required: "false"
-          request-response: |
-            access_token:token
-          prefix: "cw_token_"
-
       - name: Deploy to Cloudways
         uses: RafinBiswas/cloudways-api-action@stable
         with:
@@ -42,11 +26,10 @@ jobs:
             server_id:${{ secrets.CLOUDWAYS_SERVER_ID }}
             git_url:${{ secrets.CLOUDWAYS_GIT_URL }}
             branch:main
-          token-required: "true"
-          access-token: ${{ env.cw_token_access_token }}
+          token-required: "false"
           request-response: |
             data.status:success
-          prefix: "cw_deploy_"
+          prefix: "cw_"
 
       - name: Verify Deployment
         run: |
