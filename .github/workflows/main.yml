@@ -3,8 +3,8 @@ name: Cloudways API Execute Via Git Action
 on:
   push:
     branches:
-      - 'feature-**'
-      - 'feature/**'
+      - 'main'
+            
   pull_request:
     branches:
       - 'main'
