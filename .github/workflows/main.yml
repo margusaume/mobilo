@@ -1,23 +1,25 @@
-name: deploy via Actions to cloudways
+name: Deploy to Cloudways
+
 on:
   push:
     branches:
       - main
+
 jobs:
-  new-version-release:
+  deploy:
     runs-on: ubuntu-latest
- 
+    
     steps:
- 
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
- 
+
       - name: Build dist folder
         run: |
           mkdir -p dist
           rsync -r --exclude 'dist' --exclude '.git' --exclude '.github' --exclude '.gitignore' . dist
- 
+
       - name: Deploy with rsync
         env:
           remote_host: ${{ secrets.CLOUDWAYS_HOST }}
@@ -27,7 +29,15 @@ jobs:
           local_dir: "dist/"
           remote_dir: "/public_html/"
         run: |
-          mkdir ~/.ssh
+          mkdir -p ~/.ssh
           echo "$remote_key" > ~/.ssh/gh_actions_key
           chmod 600 ~/.ssh/gh_actions_key
           rsync -avzr -e "ssh -p ${remote_port} -i ~/.ssh/gh_actions_key -o StrictHostKeyChecking=no" ${local_dir} ${remote_user}@${remote_host}:${remote_dir}
+          echo "Deployment completed successfully!"
+
+      - name: Verify deployment
+        run: |
+          echo "✅ Deployment to Cloudways completed!"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
