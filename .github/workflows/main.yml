@@ -1,33 +1,33 @@
-name: Cloudways API Execute Via Git Action
-
+name: deploy via Actions to cloudways
 on:
   push:
     branches:
-      - 'main'
-            
+      - main
 jobs:
-  cloudways-deployment:
-    name: Cloudways Deployment
+  new-version-release:
     runs-on: ubuntu-latest
-
+ 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v2
-
-      - name: Deploy to Cloudways via SSH
-        uses: appleboy/ssh-action@v1.0.3
+ 
+      - uses: actions/checkout@v2
         with:
-          host: ${{ secrets.CLOUDWAYS_HOST }}
-          username: ${{ secrets.CLOUDWAYS_USERNAME }}
-          key: ${{ secrets.CLOUDWAYS_SSH_KEY }}
-          script: |
-            cd ${{ secrets.CLOUDWAYS_DEPLOY_PATH }}
-            git pull origin main
-            echo "Deployment completed successfully!"
-
-      - name: Verify Deployment
+          fetch-depth: 0
+ 
+      - name: Build dist folder
         run: |
-          echo "Deployment completed successfully!"
-          echo "Repository: ${{ github.repository }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
+          mkdir -p dist
+          rsync -r --exclude 'dist' --exclude '.git' --exclude '.github' --exclude '.gitignore' . dist
+ 
+      - name: Deploy with rsync
+        env:
+          remote_host: ${{ secrets.CLOUDWAYS_HOST }}
+          remote_port: "22"
+          remote_user: ${{ secrets.CLOUDWAYS_USER }}
+          remote_key: ${{ secrets.CLOUDWAYS_SSH_PRIVATE_KEY }}
+          local_dir: "dist/"
+          remote_dir: "/public_html/"
+        run: |
+          mkdir ~/.ssh
+          echo "$remote_key" > ~/.ssh/gh_actions_key
+          chmod 600 ~/.ssh/gh_actions_key
+          rsync -avzr -e "ssh -p ${remote_port} -i ~/.ssh/gh_actions_key -o StrictHostKeyChecking=no" ${local_dir} ${remote_user}@${remote_host}:${remote_dir}
